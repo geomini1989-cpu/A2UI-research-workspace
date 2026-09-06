@@ -1,0 +1,73 @@
+import { describe, it, expect } from 'vitest'
+import {
+  executeResearchTool,
+  ResearchToolError,
+  RESEARCH_TOOL_NAMES,
+  RESEARCH_SOURCE_LABEL,
+} from './researchTools.js'
+
+describe('RESEARCH_TOOL_NAMES (allow-list)', () => {
+  it('exposes exactly the three allowed tools', () => {
+    expect(RESEARCH_TOOL_NAMES).toEqual(['search_company', 'get_company_profile', 'get_financial_summary'])
+  })
+})
+
+describe('executeResearchTool', () => {
+  it('searches companies by name and ticker', () => {
+    const res = executeResearchTool('search_company', { query: 'nvidia' })
+    expect(res.text).toContain('NVIDIA')
+    expect(res.data).toMatchObject({ source: RESEARCH_SOURCE_LABEL })
+    const results = (res.data as { results: { name: string }[] }).results
+    expect(results[0].name).toBe('NVIDIA')
+  })
+
+  it('returns a company profile, resolving fuzzy tickers', () => {
+    const res = executeResearchTool('get_company_profile', { company: 'nvda' })
+    const profile = (res.data as { profile: { name: string; sector: string } }).profile
+    expect(profile.name).toBe('NVIDIA')
+    expect(profile.sector).toBe('Technology')
+    expect(res.text).toContain(RESEARCH_SOURCE_LABEL)
+  })
+
+  it('returns a financial summary for AMD', () => {
+    const res = executeResearchTool('get_financial_summary', { company: 'AMD' })
+    const fin = (res.data as { financial: { revenue: { label: string; value: string }[]; currency: string } }).financial
+    expect(fin.currency).toBe('USD')
+    expect(fin.revenue.length).toBeGreaterThan(0)
+    expect(res.text).toContain('AMD')
+  })
+
+  it('rejects an unknown tool (not on the allow-list)', () => {
+    expect(() => executeResearchTool('get_stock_price', {})).toThrowError(ResearchToolError)
+    try {
+      executeResearchTool('get_stock_price', {})
+    } catch (err) {
+      expect((err as ResearchToolError).code).toBe('UNKNOWN_TOOL')
+    }
+  })
+
+  it('wraps an empty tool argument as a NOT_FOUND error, not a crash', () => {
+    expect(() => executeResearchTool('get_company_profile', { company: '' })).toThrowError(ResearchToolError)
+  })
+
+  it('throws NOT_FOUND for an unknown company', () => {
+    try {
+      executeResearchTool('get_financial_summary', { company: 'definitely-not-a-company' })
+    } catch (err) {
+      expect((err as ResearchToolError).code).toBe('NOT_FOUND')
+    }
+  })
+
+  it('always labels results as demo/mock', () => {
+    for (const name of RESEARCH_TOOL_NAMES) {
+      const args =
+        name === 'search_company'
+          ? { query: 'tech' }
+          : name === 'get_company_profile'
+            ? { company: 'nvidia' }
+            : { company: 'nvidia' }
+      const res = executeResearchTool(name, args)
+      expect(res.text).toContain('Demo')
+    }
+  })
+})
