@@ -42,7 +42,7 @@ import { BUSINESS_COMPONENTS } from './businessComponents'
 import { DetailDrawer } from './DetailDrawer'
 import { needsChartDetail, needsTableDetail, TABLE_PREVIEW_ROWS } from './presentation'
 import { createMockMetricDetail, subscribeMetricChartDetail, type MetricChartDetail } from './metricChartInteraction'
-import { isResearchInteraction } from './actionPolicy'
+import { isFollowUpAction, isResearchInteraction } from './actionPolicy'
 import { cn } from '@/lib/utils'
 import { Badge as ShadcnBadge } from '@/components/ui/badge'
 import { Button as ShadcnButton } from '@/components/ui/button'
@@ -482,7 +482,7 @@ const Table = createComponentImplementation(
   ({ props, context }: any) => {
     const columns: { key: string; label?: string }[] = props.columns ?? []
     const rows: Record<string, unknown>[] = props.rows ?? []
-    const rowAction = isResearchInteraction(props.rowAction) ? props.rowAction : undefined
+    const rowAction = isResearchInteraction(props.rowAction) || isFollowUpAction(props.rowAction) ? props.rowAction : undefined
     const detail = needsTableDetail(rows.length, columns.length)
     const previewRows = detail ? rows.slice(0, TABLE_PREVIEW_ROWS) : rows
 

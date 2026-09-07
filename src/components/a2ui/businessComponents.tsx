@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { DetailDrawer } from './DetailDrawer'
 import { TABLE_PREVIEW_ROWS } from './presentation'
-import { hasInlineMetricDetail, isResearchInteraction } from './actionPolicy'
+import { hasInlineMetricDetail, isFollowUpAction, isResearchInteraction } from './actionPolicy'
 
 const weight = z.number().optional()
 const SemanticAction = z.object({
@@ -52,8 +52,10 @@ export const MetricCard = createComponentImplementation(
   },
   ({ props, context }: any) => {
     const [expanded, setExpanded] = React.useState(false)
-    const researchAction = isResearchInteraction(props.action) ? props.action : undefined
     const inlineDetail = hasInlineMetricDetail(props.detail)
+    const researchAction = isResearchInteraction(props.action) || (!inlineDetail && isFollowUpAction(props.action))
+      ? props.action
+      : undefined
     const interactive = Boolean(researchAction || inlineDetail)
     const detailTitle = props.detail?.title ?? `${props.title} · 关键补充`
     const detailSummary = inlineDetail ? compactText(props.detail?.summary ?? '', 84) : ''
@@ -125,7 +127,7 @@ export const ComparisonCard = createComponentImplementation(
           <div role="columnheader">{right}</div>
         </div>
         {visibleRows.map((row, index) => {
-          const rowAction = isResearchInteraction(props.rowAction) ? props.rowAction : undefined
+          const rowAction = isResearchInteraction(props.rowAction) || isFollowUpAction(props.rowAction) ? props.rowAction : undefined
           return (
           <div key={index} className={cn('genui-comparison__row', rowAction && 'genui-interactive')} role="row" tabIndex={rowAction ? 0 : undefined} onClick={() => dispatch(context, rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)])))} onKeyDown={(event) => { if (rowAction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dispatch(context, rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))) } }}>
             <div role="rowheader">{String(row.metric ?? '—')}</div>
@@ -162,7 +164,7 @@ export const StockOverview = createComponentImplementation(
     }),
   },
   ({ props, context }: any) => {
-    const action = isResearchInteraction(props.action) ? props.action : undefined
+    const action = isResearchInteraction(props.action) || isFollowUpAction(props.action) ? props.action : undefined
     const content = (
       <>
         <div>
@@ -221,7 +223,7 @@ export const RiskBadge = createComponentImplementation(
   ({ props, context }: any) => {
     const level = String(props.level || 'MEDIUM').toUpperCase()
     const state = level === 'HIGH' ? 'danger' : level === 'LOW' ? 'success' : 'warning'
-    const action = isResearchInteraction(props.action) ? props.action : undefined
+    const action = isResearchInteraction(props.action) || isFollowUpAction(props.action) ? props.action : undefined
     const content = (
       <>
         <span>{level}</span>

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { hasInlineMetricDetail, isResearchInteraction } from './actionPolicy'
+import { hasInlineMetricDetail, isFollowUpAction, isResearchInteraction } from './actionPolicy'
 
 describe('generated UI action policy', () => {
-  it('keeps ordinary semantic actions local/static unless research is explicit', () => {
-    expect(isResearchInteraction({ event: { context: { company: 'NVIDIA' } } })).toBe(false)
-    expect(isResearchInteraction({ event: { context: { company: 'NVIDIA', interactionMode: 'research' } } })).toBe(true)
+  it('keeps chart research explicit but recognizes card/table follow-up actions', () => {
+    expect(isResearchInteraction({ event: { name: 'explore_metric', context: { company: 'NVIDIA' } } })).toBe(false)
+    expect(isResearchInteraction({ event: { name: 'explore_metric', context: { company: 'NVIDIA', interactionMode: 'research' } } })).toBe(true)
+    expect(isFollowUpAction({ event: { name: 'explore_metric', context: { company: 'NVIDIA' } } })).toBe(true)
+    expect(isFollowUpAction({ event: { name: 'explore_risk', context: { company: 'NVIDIA' } } })).toBe(true)
+    expect(isFollowUpAction({ event: { name: 'apply_filters', context: {} } })).toBe(false)
+    expect(isFollowUpAction({ event: { name: 'change_time_range', context: {} } })).toBe(false)
   })
 
   it('does not make empty metric detail envelopes clickable', () => {
