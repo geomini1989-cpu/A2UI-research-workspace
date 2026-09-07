@@ -1,4 +1,5 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
+import { stableTopLevelOrder } from './layoutPolicy.js'
 
 type Component = Record<string, unknown>
 
@@ -64,6 +65,7 @@ function childIds(value: unknown): string[] {
  */
 export class StreamingA2uiState {
   private readonly componentIds = new Set<string>()
+  private readonly componentsById = new Map<string, Component>()
   private readonly nestedReferences = new Set<string>()
   private meaningfulResearchContent = false
   private readonly rootChildIds: string[] = []
@@ -101,7 +103,10 @@ export class StreamingA2uiState {
     // First pass: collect every id in this complete A2UI message. This lets a
     // root safely reference a sibling component even when root appears first.
     for (const component of components) {
-      if (typeof component.id === 'string') this.componentIds.add(component.id)
+      if (typeof component.id === 'string') {
+        this.componentIds.add(component.id)
+        this.componentsById.set(component.id, component)
+      }
       if (isMeaningfulResearchComponent(component)) this.meaningfulResearchContent = true
       if (component.component === 'Badge' && typeof component.label === 'string' && component.label.includes('MCP')) {
         this.sourceSeen = true
@@ -120,7 +125,17 @@ export class StreamingA2uiState {
         this.rootChildSet.add(id)
         this.rootChildIds.push(id)
       }
-      component.children = this.rootChildIds.map((id) => ({ id }))
+      const normalized = stableTopLevelOrder(
+        this.rootChildIds.filter((id) => !this.nestedReferences.has(id)),
+        this.componentsById,
+      )
+      this.rootChildIds.length = 0
+      this.rootChildSet.clear()
+      for (const id of normalized) {
+        this.rootChildIds.push(id)
+        this.rootChildSet.add(id)
+      }
+      component.children = normalized.map((id) => ({ id }))
       this.root = { ...component }
     }
 
@@ -146,8 +161,11 @@ export class StreamingA2uiState {
       this.rootChildIds.push(id)
     }
 
-    const normalized = this.rootChildIds.filter((id) =>
-      this.componentIds.has(id) && !this.nestedReferences.has(id))
+    const normalized = stableTopLevelOrder(
+      this.rootChildIds.filter((id) =>
+        this.componentIds.has(id) && !this.nestedReferences.has(id)),
+      this.componentsById,
+    )
 
     this.rootChildIds.length = 0
     this.rootChildSet.clear()
@@ -177,14 +195,21 @@ export class StreamingA2uiState {
     const badgeId = unique('stream-ds-badge')
     this.componentIds.add(badgeId)
 
-    const current = childIds(this.root.children)
-    return [
+    const sourceComponents: Component[] = [
       { component: 'Divider', id: dividerId },
       { component: 'Text', id: labelId, variant: 'caption', text: '数据来源' },
       { component: 'Badge', id: badgeId, label: 'Demo / MCP Research Tool', variant: 'secondary' },
+    ]
+    for (const component of sourceComponents) {
+      if (typeof component.id === 'string') this.componentsById.set(component.id, component)
+    }
+    const current = childIds(this.root.children)
+    const ordered = stableTopLevelOrder([...current, dividerId, labelId, badgeId], this.componentsById)
+    return [
+      ...sourceComponents,
       {
         ...this.root,
-        children: [...current, dividerId, labelId, badgeId].map((id) => ({ id })),
+        children: ordered.map((id) => ({ id })),
       },
     ]
   }

@@ -1,5 +1,6 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { RESEARCH_CATALOG_ID, sanitizeMessage, stripCodeFences } from './a2uiSchema.js'
+import { stableTopLevelOrder } from './layoutPolicy.js'
 
 export interface GeneratedMessages {
   /** Validated, allow-listed, normalized A2UI messages. */
@@ -217,6 +218,51 @@ export function attachRoot(messages: A2uiMessage[]): A2uiMessage[] {
   return result
 }
 
+
+function stabilizeRootLayout(messages: A2uiMessage[]): A2uiMessage[] {
+  const byId = new Map<string, Record<string, unknown>>()
+  const nested = new Set<string>()
+
+  for (const message of messages) {
+    if (!('updateComponents' in message)) continue
+    for (const raw of message.updateComponents.components) {
+      const component = raw as Record<string, unknown>
+      if (typeof component.id === 'string') byId.set(component.id, component)
+    }
+  }
+
+  for (const [id, component] of byId) {
+    if (id === 'root') continue
+    if (typeof component.child === 'string') nested.add(component.child)
+    if (Array.isArray(component.children)) {
+      for (const child of component.children) {
+        if (child && typeof child === 'object' && 'id' in child && typeof child.id === 'string') nested.add(child.id)
+        else if (typeof child === 'string') nested.add(child)
+      }
+    }
+  }
+
+  const topLevel = stableTopLevelOrder(
+    [...byId.keys()].filter((id) => id !== 'root' && !nested.has(id)),
+    byId,
+  )
+
+  return messages.map((message) => {
+    if (!('updateComponents' in message)) return { ...message } as A2uiMessage
+    return {
+      ...message,
+      updateComponents: {
+        ...message.updateComponents,
+        components: message.updateComponents.components.map((raw) => {
+          const component = raw as Record<string, unknown>
+          if (component.id !== 'root' || component.component !== 'Column') return raw
+          return { ...component, gap: 16, children: topLevel.map((id) => ({ id })) } as typeof raw
+        }),
+      },
+    } as A2uiMessage
+  })
+}
+
 /**
  * Guarantee a "Data Source: Demo / MCP Research Tool" block is present in the
  * stream. If the model already emitted a "数据来源" / MCP badge we leave it alone;
@@ -332,5 +378,6 @@ export function buildA2uiMessages(raw: unknown, options?: BuildOptions): Generat
   }
 
   const withSource = options?.dataSource === false ? messages : ensureDataSource(messages)
-  return { messages: attachRoot(withSource), droppedComponents, errors }
+  const rooted = attachRoot(withSource)
+  return { messages: stabilizeRootLayout(rooted), droppedComponents, errors }
 }

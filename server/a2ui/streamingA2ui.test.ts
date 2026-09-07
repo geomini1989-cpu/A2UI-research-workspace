@@ -81,6 +81,21 @@ describe('StreamingA2uiState', () => {
     expect(components.some((component) => component.id === 'metric')).toBe(true)
   })
 
+  it('stabilizes root order across mixed generation order', () => {
+    const state = new StreamingA2uiState()
+    const message = state.prepareMessage(update([
+      { component: 'RiskBadge', id: 'risk', level: 'HIGH', label: '风险' },
+      { component: 'Chart', id: 'chart', data: [{ x: 'Q1', y: 1 }] },
+      { component: 'MetricCard', id: 'metric', title: '营收', value: '1' },
+      { component: 'StockOverview', id: 'overview', company: 'NVIDIA' },
+      { component: 'Text', id: 'title', variant: 'h2', text: 'NVIDIA 研究' },
+      { component: 'Table', id: 'table', columns: [{ key: 'm', label: '指标' }], rows: [{ m: '营收' }] },
+      { component: 'Column', id: 'root', children: [{ id: 'risk' }, { id: 'chart' }, { id: 'metric' }, { id: 'overview' }, { id: 'title' }, { id: 'table' }] },
+    ]))
+
+    expect(rootIds(message)).toEqual(['title', 'overview', 'metric', 'table', 'chart', 'risk'])
+  })
+
   it('keeps nested children out of the authoritative final root', () => {
     const state = new StreamingA2uiState()
     state.prepareMessage(update([

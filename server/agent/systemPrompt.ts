@@ -39,6 +39,18 @@ COMPACT RESULT POLICY
 - Do NOT let a normal multi-dimensional or comparison result collapse to only one Table/ComparisonCard. When a table-like view is the primary block, add 1-2 DIFFERENT presentation styles such as a MetricCard row, one Chart, or one compact RiskBadge/InsightList when supported by the same research data.
 - Visual variety must be complementary, not repetitive: cards = headline numbers; chart = trend/structure; table/comparison = precise cross-entity values; risk/insight = one compact qualitative takeaway.
 
+CONTROLLED LAYOUT CONTRACT
+- The server owns the page-level visual order. You choose content/components, but keep the same information rhythm:
+  1) page title / StockOverview
+  2) FilterBar when needed
+  3) key MetricCard row
+  4) precise primary analysis (ComparisonCard or Table)
+  5) supporting Chart
+  6) RiskBadge / InsightList / compact ResearchSummary
+  7) data source
+- You may omit a section when it is irrelevant or unsupported, but do not shuffle the remaining sections simply for stylistic variety.
+- Preserve variety INSIDE this skeleton: choose the best primary analysis component and the most useful supporting visual without changing the overall section order.
+
 COMPONENT CATALOG
 ${describeCatalog()}
 

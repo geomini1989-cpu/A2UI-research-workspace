@@ -147,6 +147,30 @@ describe('attachRoot', () => {
 })
 
 describe('buildA2uiMessages', () => {
+  it('normalizes an existing root to the controlled layout order', () => {
+    const out = buildA2uiMessages([
+      { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: 'x', theme: {} } },
+      {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: 's',
+          components: [
+            { component: 'RiskBadge', id: 'risk', level: 'HIGH', label: '风险' },
+            { component: 'Chart', id: 'chart', data: [{ x: 'Q1', y: 1 }] },
+            { component: 'MetricCard', id: 'metric', title: '营收', value: '1' },
+            { component: 'StockOverview', id: 'overview', company: 'NVIDIA' },
+            { component: 'Text', id: 'title', variant: 'h2', text: 'NVIDIA 研究' },
+            { component: 'Table', id: 'table', columns: [{ key: 'm', label: '指标' }], rows: [{ m: '营收' }] },
+            { component: 'Column', id: 'root', children: [{ id: 'risk' }, { id: 'chart' }, { id: 'metric' }, { id: 'overview' }, { id: 'title' }, { id: 'table' }] },
+          ],
+        },
+      },
+    ], { dataSource: false })
+    const components = out.messages.flatMap((m) => 'updateComponents' in m ? m.updateComponents.components : []) as Record<string, unknown>[]
+    const root = components.find((component) => component.id === 'root') as { children: { id: string }[] }
+    expect(root.children.map((child) => child.id)).toEqual(['title', 'overview', 'metric', 'table', 'chart', 'risk'])
+  })
+
   it('injects a createSurface when the model omits one', () => {
     const out = buildA2uiMessages([
       {
