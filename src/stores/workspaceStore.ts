@@ -83,7 +83,13 @@ function handleStreamEvent(
         set({
           messages: [
             ...messages,
-            { id: nextId('agent'), role: 'agent', content: text, createdAt: Date.now() },
+            {
+              id: nextId('agent'),
+              role: 'agent',
+              content: text,
+              createdAt: Date.now(),
+              kind: last?.kind === 'followup' ? 'followup' : undefined,
+            },
           ],
         })
       }
@@ -178,7 +184,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       const currentMessages = get().messages
       set({
         messages: question
-          ? [...currentMessages, { id: nextId('user'), role: 'user', content: question, createdAt: Date.now() }]
+          ? [...currentMessages, { id: nextId('user'), role: 'user', content: question, createdAt: Date.now(), kind: 'followup' }]
           : currentMessages,
         isGenerating: true,
         agentStatus: filtering ? '正在更新分析…' : qa ? '正在回答追问…' : '正在执行操作…',

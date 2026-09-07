@@ -2,6 +2,18 @@ import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 
 type Component = Record<string, unknown>
 
+function compactGeneratedBodyText(component: Component): Component {
+  if (component.component !== 'Text') return component
+  const variant = typeof component.variant === 'string' ? component.variant : 'body'
+  if (variant !== 'body' || typeof component.text !== 'string') return component
+  const text = component.text.trim()
+  if (text.length <= 96) return component
+  return {
+    ...component,
+    text: `${text.slice(0, 96).replace(/[，。；、\s]+$/u, '')}…`,
+  }
+}
+
 function isMeaningfulResearchComponent(component: Component): boolean {
   switch (component.component) {
     case 'MetricCard':
@@ -83,7 +95,8 @@ export class StreamingA2uiState {
   prepareMessage(message: A2uiMessage): A2uiMessage {
     if (!('updateComponents' in message)) return message
 
-    const components = (message.updateComponents.components as Component[]).map((component) => ({ ...component }))
+    const components = (message.updateComponents.components as Component[])
+      .map((component) => compactGeneratedBodyText({ ...component }))
 
     // First pass: collect every id in this complete A2UI message. This lets a
     // root safely reference a sibling component even when root appears first.

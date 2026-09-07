@@ -52,10 +52,12 @@ export const MetricCard = createComponentImplementation(
   },
   ({ props, context }: any) => {
     const [expanded, setExpanded] = React.useState(false)
-    const interactive = Boolean(props.value || props.action || props.detail)
-    const fallback = createMockMetricDetail(props.title, props.value)
+    const interactive = Boolean(props.action || props.detail)
+    const fallback = props.detail ? createMockMetricDetail(props.title, props.value) : null
     const detailTitle = props.detail?.title ?? `${props.title} · 关键补充`
-    const detailSummary = compactText(props.detail?.summary ?? fallback.summary, 84)
+    const detailSummary = props.detail
+      ? compactText(props.detail.summary ?? fallback?.summary ?? '', 84)
+      : ''
     const detailPoints: string[] = Array.isArray(props.detail?.keyPoints)
       ? props.detail.keyPoints.slice(0, 2).map((point: string) => compactText(point, 56))
       : []
@@ -65,7 +67,11 @@ export const MetricCard = createComponentImplementation(
         dispatch(context, props.action)
         return
       }
-      setExpanded((current) => !current)
+      if (props.detail) {
+        setExpanded((current) => !current)
+        return
+      }
+      dispatch(context, props.action)
     }
 
     return <div className="genui-metric-wrap" style={weightStyle(props.weight)}>

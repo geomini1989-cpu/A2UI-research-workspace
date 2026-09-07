@@ -9,6 +9,8 @@ export interface ChatMessage {
   role: ChatRole
   content: string
   createdAt: number
+  /** Follow-up Q&A stays visually below the generated research surface. */
+  kind?: 'followup'
 }
 
 export interface AgentActivity { id: string; actor: string; activity: string; detail?: string; createdAt: number }

@@ -323,6 +323,13 @@
   margin-top: 0.875rem;
 }
 
+.conversation-followups {
+  width: min(100%, 48rem);
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+}
+
 .composer-shell {
   flex: none;
   padding: 0.75rem 1rem max(0.9rem, env(safe-area-inset-bottom));

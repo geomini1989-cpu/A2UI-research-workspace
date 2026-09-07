@@ -53,6 +53,8 @@ export function ChatPanel() {
   }, [messages])
 
   const hasResponse = isGenerating || taskStatus === 'WAITING_FOR_USER' || surfaceVersion > 0 || Boolean(error)
+  const primaryMessages = messages.filter((message) => message.kind !== 'followup')
+  const followUpMessages = messages.filter((message) => message.kind === 'followup')
 
   return (
     <div className="flex h-full flex-col">
@@ -78,10 +80,15 @@ export function ChatPanel() {
               </div>
             </section>
           )}
-          <MessageList messages={messages} />
+          <MessageList messages={primaryMessages} />
           {hasResponse && (
             <section className="assistant-generated" aria-label="研究结果">
               <A2UIRenderer />
+              {followUpMessages.length > 0 && (
+                <div className="conversation-followups" aria-label="研究追问">
+                  <MessageList messages={followUpMessages} />
+                </div>
+              )}
               <AgentProcess activities={activities} taskStatus={taskStatus} status={agentStatus} />
             </section>
           )}

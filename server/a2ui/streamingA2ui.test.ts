@@ -66,6 +66,21 @@ describe('StreamingA2uiState', () => {
     expect(state.hasSubstantiveContent).toBe(true)
   })
 
+  it('caps long generated body text while preserving cards', () => {
+    const state = new StreamingA2uiState()
+    const message = state.prepareMessage(update([
+      { component: 'Text', id: 'essay', variant: 'body', text: '这是一段非常长的研究说明。'.repeat(20) },
+      { component: 'MetricCard', id: 'metric', title: '营收', value: '1' },
+      { component: 'Column', id: 'root', children: [{ id: 'essay' }, { id: 'metric' }] },
+    ]))
+    const components = 'updateComponents' in message
+      ? message.updateComponents.components as Record<string, unknown>[]
+      : []
+    const body = components.find((component) => component.id === 'essay')
+    expect(String(body?.text ?? '').length).toBeLessThanOrEqual(97)
+    expect(components.some((component) => component.id === 'metric')).toBe(true)
+  })
+
   it('keeps nested children out of the authoritative final root', () => {
     const state = new StreamingA2uiState()
     state.prepareMessage(update([
