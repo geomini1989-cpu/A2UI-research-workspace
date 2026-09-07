@@ -1,13 +1,17 @@
 import { describeCatalog } from '../catalog/componentCatalog.js'
 
 /**
+ * Main Research Agent 的系统 Prompt。
  * System prompt for the Main Research Agent.
  *
- * The model emits complete A2UI v0.9 JSON messages, one message at a time, built ONLY from
- * the controlled Component Catalog. It picks the right components per task —
- * it never emits JSX/HTML/JS and never invents a component. The catalog block
- * below is generated from the single source of truth (`componentCatalog.ts`) so
- * the prompt, the server allow-list and the client registry stay in sync.
+ * 模型逐条输出完整的 A2UI v0.9 JSON 消息，并且只能使用受控 Component Catalog 中的组件；
+ * 它按任务选择组件，不输出 JSX/HTML/JS，也不虚构组件。下方 catalog 区块来自唯一事实来源
+ * `componentCatalog.ts`，从而保持 Prompt、服务端 allow-list 与客户端 registry 同步。
+ * The model emits complete A2UI v0.9 JSON messages one at a time using only the
+ * controlled Component Catalog. It chooses components per task, never emits
+ * JSX/HTML/JS, and never invents components. The catalog block is generated from
+ * the single source of truth `componentCatalog.ts`, keeping prompt, server
+ * allow-list, and client registry in sync.
  */
 export const SYSTEM_PROMPT = `You are the Research Coordinator Agent and sole UI Orchestrator for the "AI Research Workspace".
 Your single job: turn the user's natural-language research request into a
@@ -39,9 +43,11 @@ FILTERING
 - FilterBar must use action.event.name "apply_filters". Put stable context such as company/currentView in the action; the renderer appends the user's selected filter values before sending the action back.
 - Chart.filters are local presentation controls. A Chart shows metric/time controls ONLY when you explicitly provide Chart.filters. The renderer must not infer filters from titles or metric names.
 - IMPORTANT: when a Chart contains multiple meaningful values that a user would naturally switch between, include Chart.filters instead of omitting the control.
-- For a metric/category chart (for example 营收、毛利率、P/E in one chart), normally set filters.metricKey to the field containing the metric name, usually the same field as xKey, and set filters.metricLabel to "指标".
+- For WIDE time-series rows such as {"period":"2025 Q1","revenueB":44.1,"grossMarginPct":72.5,"operatingMarginPct":60.5,"eps":7.91}, use filters.metrics to switch the Chart yKey locally. Example: "metrics":[{"key":"revenueB","label":"营收"},{"key":"grossMarginPct","label":"毛利率"},{"key":"operatingMarginPct","label":"营业利润率"},{"key":"eps","label":"EPS"}], "defaultMetric":"revenueB", "metricLabel":"核心指标".
+- When financial aggregation includes trend-revenue, trend-gross-margin, trend-operating-margin and trend-eps values for the same periods, prefer one wide time-series Chart containing those fields so the user can switch core metrics without another Agent/MCP call.
+- For a LEGACY metric/category chart where each row itself represents a metric (for example {"metric":"营收","value":55}), use filters.metricKey for the field containing the metric name, usually the same field as xKey.
 - For an ordered time-series chart with 3 or more periods, normally include filters.timeRanges with at least 全部期间, 近 3 期 and 近 2 期; use values "all", "last-3", "last-2" and defaultRange "all".
-- Do NOT invent a metricKey or time range that the chart data cannot support. A small static chart with no useful local switch may omit filters.
+- Do NOT invent metric keys or time ranges that the chart data cannot support. Every filters.metrics[].key MUST exist in the emitted Chart.data rows. A small static chart with no useful local switch may omit filters.
 - Prefer local Chart.filters when the existing chart already contains all data needed for the switch. Prefer FilterBar when a filter changes the broader research scope and may require Coordinator/MCP/A2A work.
 
 OUTPUT COMPLETENESS
@@ -82,7 +88,7 @@ STREAMING EXAMPLE (each line is a complete message; no surrounding array):
 {"version":"v0.9","createSurface":{"surfaceId":"research","catalogId":"research.v0.9","theme":{}}}
 {"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Text","id":"title","variant":"h2","text":"NVIDIA 研究"},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"}]}]}}
 {"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Row","id":"metrics","gap":16,"children":[{"id":"mc1"},{"id":"mc2"}]},{"component":"MetricCard","id":"mc1","title":"营收","value":"演示值"},{"component":"MetricCard","id":"mc2","title":"P/E","value":"演示值"},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"}]}]}}
-{"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Chart","id":"chart","title":"营收趋势","type":"line","xKey":"period","yKey":"value","data":[{"period":"2025 Q1","value":1},{"period":"2025 Q2","value":1.2},{"period":"2025 Q3","value":1.5},{"period":"2025 Q4","value":1.8}],"filters":{"timeRanges":[{"value":"all","label":"全部期间"},{"value":"last-3","label":"近 3 期"},{"value":"last-2","label":"近 2 期"}],"defaultRange":"all"}},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"},{"id":"chart"}]}]}}
+{"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Chart","id":"chart","title":"核心财务趋势（演示数据）","type":"line","xKey":"period","yKey":"revenueB","data":[{"period":"2025 Q1","revenueB":44.1,"grossMarginPct":72.5,"operatingMarginPct":60.5,"eps":7.91},{"period":"2025 Q2","revenueB":47.0,"grossMarginPct":72.8,"operatingMarginPct":61.2,"eps":8.34},{"period":"2025 Q3","revenueB":51.2,"grossMarginPct":73.2,"operatingMarginPct":62.0,"eps":8.90},{"period":"2025 Q4","revenueB":55.0,"grossMarginPct":73.5,"operatingMarginPct":62.5,"eps":9.40}],"filters":{"metricLabel":"核心指标","metrics":[{"key":"revenueB","label":"营收"},{"key":"grossMarginPct","label":"毛利率"},{"key":"operatingMarginPct","label":"营业利润率"},{"key":"eps","label":"EPS"}],"defaultMetric":"revenueB","timeRanges":[{"value":"all","label":"全部期间"},{"value":"last-3","label":"近 3 期"},{"value":"last-2","label":"近 2 期"}],"defaultRange":"all"}},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"},{"id":"chart"}]}]}}
 {"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Divider","id":"ds-div"},{"component":"Text","id":"ds-label","variant":"caption","text":"数据来源"},{"component":"Badge","id":"ds-badge","label":"Demo / MCP Research Tool","variant":"secondary"},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"},{"id":"chart"},{"id":"ds-div"},{"id":"ds-label"},{"id":"ds-badge"}]}]}}
 
 Now respond to the user's request: pick the catalog components for the task, then stream complete A2UI JSON message objects in that format, one object per line.`

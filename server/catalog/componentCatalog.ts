@@ -1,36 +1,38 @@
 /**
- * Component Catalog — the SINGLE source of truth for the A2UI component set.
+ * Component Catalog 是 A2UI 组件集合的唯一事实来源。
+ * Component Catalog is the single source of truth for the A2UI component set.
  *
- * There are two layers:
- *   - Basic components (layout + generic building blocks)
- *   - Business components (research-domain composites the Agent chooses from)
+ * 分为两层：基础组件（布局 + 通用积木）与业务组件（Agent 选择的研究领域组合组件）。
+ * It has two layers: basic components (layout + generic building blocks) and
+ * business components (research-domain composites selected by the Agent).
  *
- * This file is PURE DATA: no React, no DOM, no JSX. It is imported by:
- *   - the server agent (system prompt + allow-list), and
- *   - the client render registry (which pairs each name with a React impl).
+ * 本文件仅包含纯数据，不包含 React、DOM 或 JSX；服务端 Agent 与客户端渲染注册表共同读取它。
+ * This file contains pure data only—no React, DOM, or JSX—and is shared by the
+ * server Agent and the client render registry.
  *
- * Keeping one list here means the agent prompt, the server sanitizer and the
- * client catalog can never drift apart. The Agent only sees `name`, `description`
- * and `props` — never JSX/React internals.
+ * 单一列表可以防止 Prompt、服务端 sanitizer 和客户端 catalog 发生漂移；Agent 只看到
+ * `name`、`description` 与 `props`，不会接触 JSX/React 内部实现。
+ * One shared list prevents prompt, sanitizer, and client catalog drift; the
+ * Agent sees only `name`, `description`, and `props`, never JSX/React internals.
  */
 
 export type CatalogCategory = 'basic' | 'business'
 
 export interface CatalogComponentSpec {
   name: string
-  /** Machine/AI-readable one-liner the agent uses to pick the right component. */
+  /** Agent 用于选择组件的机器可读一句话描述。 / Machine-readable one-liner the Agent uses to choose a component. */
   description: string
   category: CatalogCategory
-  /** propName -> type hint. A trailing `?` marks the prop as optional. */
+  /** propName -> 类型提示，尾部 `?` 表示可选。 / propName -> type hint; trailing `?` means optional. */
   props: Record<string, string>
-  /** Names of props required for a meaningful render (used in the prompt). */
+  /** 有意义渲染所需的属性名（用于 Prompt）。 / Prop names required for a meaningful render (used in the prompt). */
   required: string[]
-  /** Short human label (used by the prompt / registry). */
+  /** 简短的人类可读标签（用于 Prompt / registry）。 / Short human label used by the prompt / registry. */
   label: string
 }
 
 export const COMPONENT_CATALOG: CatalogComponentSpec[] = [
-  // ------------------------------------------------------------------ Basic
+  // -------------------------------------------------------- 基础组件 / Basic components
   {
     name: 'Text',
     label: 'Text',
@@ -140,12 +142,12 @@ export const COMPONENT_CATALOG: CatalogComponentSpec[] = [
       yKey: 'string?',
       height: 'number?',
       interaction: 'object? {pointAction?,barAction?,seriesAction?}; use context.interactionMode="research" only for deep research',
-      filters: 'object? {metricKey?,metricLabel?,timeRanges:[{value,label}],rangeKey?,defaultRange?}; only include when the Agent explicitly wants chart-local controls',
+      filters: 'object? {metricKey?,metricLabel?,metrics:[{key,label}],defaultMetric?,timeRanges:[{value,label}],rangeKey?,defaultRange?}; metrics switches yKey for wide time-series data, metricKey remains for legacy category charts',
       weight: 'number?',
     },
     required: ['data'],
   },
-  // --------------------------------------------------------------- Business
+  // ------------------------------------------------------- 业务组件 / Business components
   {
     name: 'FilterBar',
     label: 'Analysis Filters',
@@ -225,10 +227,10 @@ export const COMPONENT_CATALOG: CatalogComponentSpec[] = [
 export const BASIC_COMPONENT_NAMES = COMPONENT_CATALOG.filter((c) => c.category === 'basic').map((c) => c.name)
 export const BUSINESS_COMPONENT_NAMES = COMPONENT_CATALOG.filter((c) => c.category === 'business').map((c) => c.name)
 
-/** Every component name — the server-side allow-list derives from this. */
+/** 所有组件名；服务端 allow-list 由此派生。 / Every component name; the server allow-list derives from this. */
 export const ALLOWED_COMPONENTS = COMPONENT_CATALOG.map((c) => c.name)
 
-/** Lightweight, Agent-facing machine-readable metadata (no React). */
+/** 面向 Agent 的轻量机器可读元数据（无 React）。 / Lightweight Agent-facing metadata (no React). */
 export const CATALOG_METADATA = COMPONENT_CATALOG.map((spec) => ({
   name: spec.name,
   description: spec.description,
@@ -238,9 +240,8 @@ export const CATALOG_METADATA = COMPONENT_CATALOG.map((spec) => ({
 }))
 
 /**
- * Render the catalog into a compact prompt block the Agent reads. It lists the
- * allowed names and gives summary + props for the business components so the
- * Agent can pick the right one and emit correct props.
+ * 将目录渲染成 Agent 可读取的紧凑 Prompt 区块，列出允许的组件名，并提供业务组件摘要与属性。
+ * Render the catalog into a compact Agent-readable prompt block with allowed names plus business summaries and props.
  */
 export function describeCatalog(): string {
   const nameLine = (list: string[]) => list.join(', ')

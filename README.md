@@ -409,3 +409,9 @@ system prompt forbids the model from claiming a live API, and the UI labels demo
 as **Demo Data** / **Demo research data**. The architecture
 (DataModel + GenericBinder + MCP client) is ready to swap Demo values for live data without
 changing the catalog.
+
+
+## Code comment convention / 代码注释规范
+
+本项目要求新增或修改的代码注释使用中英双语，默认中文在前、英文在后。详细约定见根目录 `AGENTS.md`。
+All new or modified code comments in this project must be bilingual Chinese/English, with Chinese first by default. See the root `AGENTS.md` for details.

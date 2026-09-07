@@ -44,6 +44,13 @@ describe('COMPONENT_CATALOG (single source of truth)', () => {
     expect(compare.props.rows).toContain('array<{metric,left,right}>')
   })
 
+  it('documents wide time-series metric switching for Chart filters', () => {
+    const chart = COMPONENT_CATALOG.find((c) => c.name === 'Chart')!
+    expect(chart.props.filters).toContain('metrics:[{key,label}]')
+    expect(chart.props.filters).toContain('defaultMetric?')
+    expect(chart.props.filters).toContain('switches yKey')
+  })
+
   it('generates a prompt block that names the business components', () => {
     const text = describeCatalog()
     expect(text).toContain('MetricCard')

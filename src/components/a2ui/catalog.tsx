@@ -1,14 +1,19 @@
 /**
+ * AI Research Workspace 的 A2UI 组件目录。
  * A2UI component catalog for the AI Research Workspace.
  *
+ * 我们复用官方 A2UI v0.9 机制（MessageProcessor、SurfaceModel、GenericBinder、
+ * createComponentImplementation），但提供自己的 React 渲染实现，让生成界面更像真实研究产品
+ * （Tailwind + shadcn/ui），而不是无样式的基础组件目录。
  * We reuse the official A2UI v0.9 machinery (MessageProcessor, SurfaceModel,
- * GenericBinder, createComponentImplementation) but provide our OWN React
- * rendering implementations so the generated UI looks like a real research
- * product (Tailwind + shadcn/ui) instead of the unstyled basic catalog.
+ * GenericBinder, createComponentImplementation) but provide our own React
+ * renderers so generated UI looks like a real research product (Tailwind +
+ * shadcn/ui) instead of the unstyled basic catalog.
  *
- * The Agent can ONLY emit the components listed in ALLOWED_COMPONENTS. Anything
- * else is rejected/ignored by the server and treated as an unknown component by
- * the renderer.
+ * Agent 只能输出 ALLOWED_COMPONENTS 中列出的组件；其他组件会被服务端拒绝/忽略，
+ * 并被渲染器视为未知组件。
+ * The Agent can emit only components listed in ALLOWED_COMPONENTS; everything
+ * else is rejected/ignored by the server and treated as unknown by the renderer.
  */
 import * as React from 'react'
 import {
@@ -59,21 +64,21 @@ import {
 } from '@/components/ui/select'
 
 /* ------------------------------------------------------------------ */
-/* Schema helpers — structured so the GenericBinder recognizes them    */
+/* Schema 辅助定义：保持 GenericBinder 可识别的结构 / Schema helpers structured for GenericBinder */
 /* ------------------------------------------------------------------ */
 
-/** A value that can be either a literal string or a data-model path binding. */
+/** 可为字面量字符串或数据模型路径绑定。 / A literal string or a data-model path binding. */
 const DynString = z.union([z.string(), z.object({ path: z.string() })])
 const DynStringList = z.union([z.array(z.string()), z.object({ path: z.string() })])
 /**
- * A list of child component references. Static arrays (`["id1","id2"]`) render
- * as-is; the `{componentId, path}` form expands a data-model array into children.
+ * 子组件引用列表：静态数组原样渲染；`{componentId, path}` 会把数据模型数组展开为子组件。
+ * Child references: static arrays render as-is; `{componentId, path}` expands a data-model array into children.
  */
 const ChildList = z.union([
   z.array(z.any()),
   z.object({ componentId: z.string(), path: z.string() }),
 ])
-/** An A2UI action (event or function call), resolved by the binder to () => void. */
+/** A2UI 动作（事件或函数调用），由 binder 解析为 () => void。 / An A2UI action resolved by the binder to () => void. */
 const Action = z.union([
   z.object({
     event: z.object({
@@ -91,7 +96,7 @@ const Action = z.union([
     }),
   }),
 ])
-/** Kept as data so richer components can merge the clicked row/point context. */
+/** 保持为数据结构，便于复杂组件合并被点击行/点的上下文。 / Kept as data so richer components can merge clicked row/point context. */
 const SemanticAction = z.object({
   event: z.object({ name: z.string(), context: z.record(z.string(), z.unknown()).optional() }),
 })
@@ -102,7 +107,7 @@ function dispatchSemantic(context: any, action: z.infer<typeof SemanticAction> |
   void context.dispatchAction({ event: { ...action.event, context: { ...safeContext, ...extra } } })
 }
 
-/** Flex sizing helpers shared by every leaf component. */
+/** 所有叶子组件共享的 Flex 尺寸辅助。 / Flex sizing helpers shared by every leaf component. */
 const weight = z.number().optional()
 
 function weightStyle(w?: number): React.CSSProperties {
@@ -117,7 +122,7 @@ function restrainedGap(gap?: number): number {
   return 24
 }
 
-/** Render a list of resolved children (ids or {id,basePath}) via buildChild. */
+/** 通过 buildChild 渲染已解析的子组件列表（id 或 {id,basePath}）。 / Render resolved children via buildChild. */
 function ChildListRenderer({
   list,
   buildChild,
@@ -151,7 +156,7 @@ function ChildListRenderer({
 }
 
 /* ------------------------------------------------------------------ */
-/* Component implementations                                           */
+/* 组件实现 / Component implementations                               */
 /* ------------------------------------------------------------------ */
 
 const Text = createComponentImplementation(
@@ -533,6 +538,8 @@ const Chart = createComponentImplementation(
       filters: z.object({
         metricKey: z.string().optional(),
         metricLabel: z.string().optional(),
+        metrics: z.array(z.object({ key: z.string(), label: z.string() })).default([]),
+        defaultMetric: z.string().optional(),
         timeRanges: z.array(z.object({ value: z.string(), label: z.string() })).default([]),
         rangeKey: z.string().optional(),
         defaultRange: z.string().optional(),
@@ -541,8 +548,15 @@ const Chart = createComponentImplementation(
     }),
   },
   ({ props, context }: any) => {
+    const seriesMetrics: Array<{ key: string; label: string }> = props.filters?.metrics ?? []
+    const defaultSeriesMetric = (
+      props.filters?.defaultMetric
+      && seriesMetrics.some((metric) => metric.key === props.filters.defaultMetric)
+    )
+      ? props.filters.defaultMetric
+      : seriesMetrics.find((metric) => metric.key === props.yKey)?.key ?? seriesMetrics[0]?.key ?? ''
     const [selectedRange, setSelectedRange] = React.useState(props.filters?.defaultRange ?? 'all')
-    const [selectedMetric, setSelectedMetric] = React.useState('')
+    const [selectedMetric, setSelectedMetric] = React.useState(defaultSeriesMetric)
     const [metricDetail, setMetricDetail] = React.useState<MetricChartDetail | null>(null)
     const [selectedPoint, setSelectedPoint] = React.useState<Record<string, unknown> | null>(null)
     const baseData: Record<string, unknown>[] = props.data ?? []
@@ -550,24 +564,39 @@ const Chart = createComponentImplementation(
     const baseTitle = String(props.title ?? '研究图表')
     const financialMetricChart = /核心财务指标|财务指标|financial metrics/i.test(baseTitle)
       || baseData.some((item) => /营收|每股收益|毛利|市盈率|revenue|eps|margin|p\/e/i.test(String(item[baseXKey] ?? '')))
+    const seriesMetricSignature = seriesMetrics.map((metric) => `${metric.key}:${metric.label}`).join('|')
+
+    React.useEffect(() => {
+      if (seriesMetrics.length === 0) return
+      setSelectedMetric(defaultSeriesMetric)
+      setMetricDetail(null)
+    }, [seriesMetricSignature, defaultSeriesMetric])
 
     React.useEffect(() => subscribeMetricChartDetail((next) => {
       if (next.targetChartId && next.targetChartId !== context.componentModel.id) return
       if (!next.targetChartId && !financialMetricChart) return
-      setMetricDetail(next)
-      setSelectedMetric(next.metric)
+      const matchingSeries = seriesMetrics.find((metric) => metric.key === next.metric || metric.label === next.metric)
+      if (matchingSeries) {
+        setSelectedMetric(matchingSeries.key)
+        setMetricDetail(null)
+      } else {
+        setSelectedMetric('')
+        setMetricDetail(next)
+      }
       setSelectedRange('all')
       setSelectedPoint(null)
-    }), [context.componentModel.id, financialMetricChart])
+    }), [context.componentModel.id, financialMetricChart, seriesMetricSignature])
 
     const rangeKey = props.filters?.rangeKey ?? 'range'
     const allData: Record<string, unknown>[] = metricDetail?.data ?? baseData
     let data = allData
     if (/^last-\d+$/.test(selectedRange)) data = allData.slice(-Number(selectedRange.slice(5)))
     else if (selectedRange !== 'all' && selectedRange) data = allData.filter((item) => !item[rangeKey] || String(item[rangeKey]) === selectedRange)
+    const activeSeries = seriesMetrics.find((metric) => metric.key === selectedMetric)
     const xKey = metricDetail?.xKey ?? baseXKey
-    const yKey = metricDetail?.yKey ?? props.yKey ?? 'y'
-    const activeTitle = metricDetail?.title ?? baseTitle
+    const yKey = metricDetail?.yKey ?? activeSeries?.key ?? props.yKey ?? 'y'
+    const activeTitle = metricDetail?.title
+      ?? (activeSeries ? `${activeSeries.label}趋势${/演示/.test(baseTitle) ? '（演示数据）' : ''}` : baseTitle)
     const requestedHeight = props.height
     const height = Math.min(Math.max(requestedHeight ?? 220, 180), 280)
     const type = props.type ?? 'bar'
@@ -575,15 +604,26 @@ const Chart = createComponentImplementation(
     const detail = needsChartDetail(data.length, requestedHeight)
     const summary = metricDetail?.summary ?? `${activeTitle}，共 ${data.length} 个数据点，展示 ${xKey} 与 ${yKey} 的关系。`
     const metricKey = props.filters?.metricKey
-    const metricOptions = metricKey
-      ? baseData.map((item) => String(item[metricKey] ?? '')).filter(Boolean)
+    const legacyMetricValues = seriesMetrics.length === 0 && metricKey
+      ? [...new Set(baseData.map((item) => String(item[metricKey] ?? '')).filter(Boolean))]
       : []
+    const metricOptions = seriesMetrics.length > 0
+      ? seriesMetrics.map((metric) => ({ value: metric.key, label: metric.label }))
+      : legacyMetricValues.map((metric) => ({ value: metric, label: metric }))
     const timeRanges = props.filters?.timeRanges ?? []
 
     const selectMetric = (metric: string) => {
       setSelectedMetric(metric)
       setSelectedPoint(null)
       setSelectedRange('all')
+
+      // 宽表时间序列通过切换 yKey 复用同一份数据；旧的 metricKey 模式继续兼容分类指标图。
+      // Wide time-series charts reuse the same rows by switching yKey; the legacy metricKey mode remains compatible with category charts.
+      if (seriesMetrics.length > 0) {
+        setMetricDetail(null)
+        return
+      }
+
       if (!metric) {
         setMetricDetail(null)
         return
@@ -596,9 +636,8 @@ const Chart = createComponentImplementation(
     const onChartClick = (entry: any) => {
       const point = entry?.activePayload?.[0]?.payload ?? (entry?.activeLabel ? { [xKey]: entry.activeLabel } : entry?.payload)
       if (!point) return
-      // A chart point is usually a simple fact: reveal it locally below the
-      // chart. An Agent call happens only when the model explicitly marks it
-      // as a deep-research action.
+      // 图表数据点通常只是简单事实，优先在图表内本地展示；仅当模型明确标记为深度研究时才调用 Agent。
+      // A chart point is usually a simple fact shown locally; call an Agent only when the model explicitly marks deep research.
       if (pointAction?.event.context?.interactionMode === 'research') {
         dispatchSemantic(context, pointAction, { period: String(point[xKey] ?? ''), value: String(point[yKey] ?? '') })
       } else setSelectedPoint(point)
@@ -644,7 +683,7 @@ const Chart = createComponentImplementation(
         <figcaption>{activeTitle}</figcaption>
         {(metricOptions.length > 0 || timeRanges.length > 0) && <div className="genui-chart-filters">
           <SlidersHorizontal aria-hidden="true" />
-          {metricOptions.length > 0 && <label className="genui-chart-filter"><span>{props.filters?.metricLabel ?? '指标'}</span><select value={selectedMetric} onChange={(event) => selectMetric(event.target.value)}><option value="">全部指标</option>{metricOptions.map((metric) => <option key={metric} value={metric}>{metric}</option>)}</select></label>}
+          {metricOptions.length > 0 && <label className="genui-chart-filter"><span>{props.filters?.metricLabel ?? (seriesMetrics.length > 0 ? '核心指标' : '指标')}</span><select value={selectedMetric} onChange={(event) => selectMetric(event.target.value)}>{seriesMetrics.length === 0 && <option value="">全部指标</option>}{metricOptions.map((metric) => <option key={metric.value} value={metric.value}>{metric.label}</option>)}</select></label>}
           {timeRanges.length > 0 && <label className="genui-chart-filter"><span>时间</span><select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value)}>{timeRanges.map((range: { value: string; label: string }) => <option key={range.value} value={range.value}>{range.label}</option>)}</select></label>}
           {metricDetail && <button type="button" className="genui-chart-reset" onClick={() => selectMetric('')}>返回核心指标</button>}
         </div>}
@@ -666,17 +705,17 @@ const Chart = createComponentImplementation(
 )
 
 /* ------------------------------------------------------------------ */
-/* Assembly / Component Registry                                       */
+/* 组装与组件注册表 / Assembly and Component Registry                  */
 /* ------------------------------------------------------------------ */
 
 /**
- * The registry maps every catalog component name to a React implementation.
- * The list of names is NOT duplicated here — it comes from the shared
- * Component Catalog. The business implementations are imported from
- * `businessComponents.tsx`; the basic ones are defined above.
+ * 注册表把目录中的组件名映射到 React 实现；名称列表不在这里重复维护，而来自共享 Component Catalog。
+ * 业务组件实现从 `businessComponents.tsx` 导入，基础组件在本文件定义。
+ * The registry maps catalog names to React implementations without duplicating the name list.
+ * Business implementations come from `businessComponents.tsx`; basic implementations are defined here.
  */
 const REGISTRY: Record<string, ReactComponentImplementation> = {
-  // basic
+  // 基础组件 / Basic components
   Text,
   Card,
   Button,
@@ -690,14 +729,14 @@ const REGISTRY: Record<string, ReactComponentImplementation> = {
   Divider,
   Table,
   Chart,
-  // business
+  // 业务组件 / Business components
   ...BUSINESS_COMPONENTS,
 }
 
 /**
- * Assemble the catalog in the SHARED canonical order. If a catalog name has no
- * implementation we fail loudly at load time so the allow-list and the renderer
- * can never drift apart.
+ * 按共享的规范顺序组装目录；若目录组件缺少实现，则在加载时直接失败，避免 allow-list 与渲染器漂移。
+ * Assemble the catalog in the shared canonical order and fail at load time if an implementation is missing,
+ * preventing the allow-list and renderer from drifting apart.
  */
 const components = COMPONENT_CATALOG.map((spec) => {
   const impl = REGISTRY[spec.name]
@@ -707,7 +746,7 @@ const components = COMPONENT_CATALOG.map((spec) => {
 
 export const ALLOWED_COMPONENTS = components.map((c) => c.name)
 
-/** Catalog id used in the `createSurface` message. */
+/** `createSurface` 消息使用的目录 ID。 / Catalog id used by `createSurface`. */
 export const RESEARCH_CATALOG_ID = 'research.v0.9'
 
 export const researchCatalog = new Catalog<ReactComponentImplementation>(

@@ -15,7 +15,7 @@ function numericValue(value: unknown): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
-/** Demo history used only when the generated payload has no metric time series. */
+/** 仅在生成结果缺少指标时间序列时使用的演示历史。 / Demo history used only when generated payload lacks a metric time series. */
 export function createMockMetricDetail(metric: string, currentValue?: unknown): MetricChartDetail {
   const normalized = metric.toLowerCase()
   const current = numericValue(currentValue)
