@@ -126,7 +126,7 @@ export async function runResearchJobAction(action: AgentActionPayload, emit: Emi
     if (action.name === 'save_research_job_draft') {
       const job = await saveResearchJobDraft(inputFromAction(action))
       emitMessages(emit, researchJobFormSurface(job, 'research-job-' + job.id, true))
-      emit({ type: 'agent_text', text: '草稿已保存。刷新后可以输入“打开研究任务 ' + job.id + '”继续。' })
+      emit({ type: 'agent_text', text: '草稿已保存。任务编号：' + job.id + '。之后输入这个编号即可继续编辑。' })
       emit({ type: 'task_state', state: 'WAITING_FOR_USER', taskId: job.id })
       return
     }

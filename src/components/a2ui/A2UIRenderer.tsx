@@ -20,7 +20,7 @@ function ErrorState({ error, inline = false, onRetry }: { error: string; inline?
     <div className={inline ? 'genui-inline-error' : 'genui-error'} role="alert">
       <strong>{inline ? '请检查输入内容' : '无法生成研究结果'}</strong>
       <p>{error}</p>
-      {!inline && <small>请重试；若问题持续，请检查后端日志和模型配置。</small>}
+      {!inline && <small>请稍后重试，或调整研究范围后再次提交。</small>}
       {!inline && onRetry && <button type="button" className="genui-retry" onClick={onRetry}>重试</button>}
     </div>
   )

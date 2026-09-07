@@ -96,14 +96,14 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
     rootChildren.push(ref(String(component.id)))
   }
 
-  addRoot({ component: 'Text', id: 'composer-title', variant: 'h2', text: state.comparison ? `${state.company} vs ${state.comparison} 研究组合器` : `${state.company} 研究组合器` })
+  addRoot({ component: 'Text', id: 'composer-title', variant: 'h2', text: state.comparison ? `${state.company} vs ${state.comparison} 研究方案` : `${state.company} 研究方案` })
   addRoot({
     component: 'Text',
     id: 'composer-help',
     variant: 'body',
-    text: '像点单一样添加或移除研究模块。每次操作都在同一个 A2UI Surface 中实时重组；点击开始研究后才会调用专业 Agent。',
+    text: '选择本次需要覆盖的研究方向。你可以随时增减内容，确认后再开始分析。',
   })
-  addRoot({ component: 'Badge', id: 'composer-status', label: `A2UI 实时组合 · 已选 ${state.selected.length} 个模块`, variant: 'secondary' })
+  addRoot({ component: 'Badge', id: 'composer-status', label: `已选择 ${state.selected.length} 个研究方向`, variant: 'secondary' })
 
   if (state.comparison) {
     const comparisonChildren = [ref('comparison-text'), ref('comparison-remove')]
@@ -120,7 +120,7 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
     )
   }
 
-  addRoot({ component: 'Text', id: 'current-title', variant: 'h3', text: '当前研究单' })
+  addRoot({ component: 'Text', id: 'current-title', variant: 'h3', text: '已选研究方向' })
 
   if (state.selected.length === 0) {
     addRoot({
@@ -128,7 +128,7 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
       id: 'empty-plan',
       children: [ref('empty-plan-text')],
     })
-    components.push({ component: 'Text', id: 'empty-plan-text', variant: 'body', text: '还没有加入研究模块。先从下面挑一项。' })
+    components.push({ component: 'Text', id: 'empty-plan-text', variant: 'body', text: '还没有选择研究方向。先从下面添加一项。' })
   } else {
     const moduleCards = state.selected.map((dimension) => ref(`module-${dimension}`))
     addRoot({ component: 'Row', id: 'selected-modules', gap: 12, children: moduleCards })
@@ -159,7 +159,7 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
     }
   }
 
-  addRoot({ component: 'Text', id: 'add-title', variant: 'h3', text: '继续加点' })
+  addRoot({ component: 'Text', id: 'add-title', variant: 'h3', text: '添加研究方向' })
   const available = DIMENSIONS.filter((dimension) => !state.selected.includes(dimension))
   const addButtons = available.map((dimension) => ref(`add-${dimension}`))
   if (!state.comparison) addButtons.push(ref('add-comparison'))
@@ -201,7 +201,7 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
   addRoot({
     component: 'Card',
     id: 'routing-preview',
-    title: '执行预览',
+    title: '研究范围',
     children: [ref('routing-text')],
   })
   components.push({
@@ -222,7 +222,7 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
       action: { event: { name: 'composer_start', context: baseContext() } },
     })
   } else {
-    addRoot({ component: 'Text', id: 'composer-tip', variant: 'caption', text: '至少加入一个研究模块后即可开始。' })
+    addRoot({ component: 'Text', id: 'composer-tip', variant: 'caption', text: '至少选择一个研究方向后即可开始。' })
   }
 
   const messages: A2uiMessage[] = []
@@ -268,7 +268,7 @@ function researchRequest(state: ComposerState): string {
 }
 
 export function isResearchComposerRequest(message: string): boolean {
-  return /研究组合器|研究方案|研究菜单|research\s+composer|research\s+plan/i.test(message)
+  return /研究方案|研究方案|研究菜单|research\s+composer|research\s+plan/i.test(message)
 }
 
 export function isResearchComposerAction(name: string): boolean {
@@ -278,7 +278,7 @@ export function isResearchComposerAction(name: string): boolean {
 export async function runResearchComposerRequest(message: string, emit: Emit): Promise<void> {
   const state = stateFromRequest(message)
   const surfaceId = `composer-${crypto.randomUUID()}`
-  emit({ type: 'status', status: '正在打开研究组合器…' })
+  emit({ type: 'status', status: '正在准备研究方案…' })
   for (const a2uiMessage of composerMessages(state, surfaceId, true)) emit({ type: 'message', message: a2uiMessage })
   emit({ type: 'task_state', state: 'WAITING_FOR_USER', taskId: surfaceId })
 }
@@ -324,7 +324,7 @@ export async function runResearchComposerAction(action: AgentActionPayload, emit
     return
   }
 
-  emit({ type: 'status', status: '正在实时重组 A2UI…' })
+  emit({ type: 'status', status: '正在更新研究方案…' })
   for (const a2uiMessage of composerMessages(state, surfaceId, false)) emit({ type: 'message', message: a2uiMessage })
   emit({ type: 'task_state', state: 'WAITING_FOR_USER', taskId: surfaceId })
 }

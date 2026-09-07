@@ -38,6 +38,17 @@ const DEPTH_OPTIONS = [
   { value: 'comprehensive', label: '全面' },
 ]
 
+const DIMENSION_LABELS = { financial: '财务', market: '市场与新闻', technology: '技术与产品' } as const
+const DEPTH_LABELS = { quick: '快速', deep: '深度', comprehensive: '全面' } as const
+const STATUS_LABELS = {
+  DRAFT: '草稿',
+  SUBMITTED: '已提交',
+  RUNNING: '进行中',
+  COMPLETED: '已完成',
+  FAILED: '失败',
+  CANCELLED: '已取消',
+} as const
+
 function formData(job: ResearchJob) {
   return {
     company: job.company,
@@ -76,11 +87,11 @@ export function researchJobFormSurface(job: ResearchJob, surfaceId: string, save
 export function researchJobSubmittedSurface(job: ResearchJob, surfaceId: string): A2uiMessage[] {
   return surface(surfaceId, [
     { component: 'Text', id: 'title', variant: 'h2', text: '研究任务已提交' },
-    { component: 'Badge', id: 'status', label: job.status, variant: 'secondary' },
+    { component: 'Badge', id: 'status', label: STATUS_LABELS[job.status], variant: 'secondary' },
     { component: 'Text', id: 'job-id', variant: 'body', text: '任务编号：' + job.id },
     { component: 'Text', id: 'company', variant: 'body', text: '研究对象：' + job.company },
-    { component: 'Text', id: 'scope', variant: 'body', text: '研究维度：' + job.dimensions.join(' · ') },
-    { component: 'Text', id: 'depth', variant: 'body', text: '研究深度：' + job.depth },
+    { component: 'Text', id: 'scope', variant: 'body', text: '研究维度：' + job.dimensions.map((item) => DIMENSION_LABELS[item]).join(' · ') },
+    { component: 'Text', id: 'depth', variant: 'body', text: '研究深度：' + DEPTH_LABELS[job.depth] },
     { component: 'Button', id: 'start', label: '开始研究', variant: 'primary', action: { event: { name: 'start_research_job', context: { jobId: job.id } } } },
   ], {})
 }
@@ -88,9 +99,9 @@ export function researchJobSubmittedSurface(job: ResearchJob, surfaceId: string)
 export function researchJobStatusSurface(job: ResearchJob, surfaceId: string): A2uiMessage[] {
   return surface(surfaceId, [
     { component: 'Text', id: 'title', variant: 'h2', text: '研究任务' },
-    { component: 'Badge', id: 'status', label: job.status, variant: 'secondary' },
+    { component: 'Badge', id: 'status', label: STATUS_LABELS[job.status], variant: 'secondary' },
     { component: 'Text', id: 'job-id', variant: 'body', text: '任务编号：' + job.id },
     { component: 'Text', id: 'company', variant: 'body', text: '研究对象：' + job.company },
-    { component: 'Text', id: 'scope', variant: 'body', text: '研究维度：' + job.dimensions.join(' · ') },
+    { component: 'Text', id: 'scope', variant: 'body', text: '研究维度：' + job.dimensions.map((item) => DIMENSION_LABELS[item]).join(' · ') },
   ], {})
 }

@@ -1,6 +1,6 @@
 import { ChevronDown } from 'lucide-react'
 
-import { activityDisplayName, processSummary } from '@/components/a2ui/presentation'
+import { activityDisplayName, activityLabel, processSummary } from '@/components/a2ui/presentation'
 import type { AgentActivity, WorkspaceState } from '@/types/chat'
 
 interface AgentProcessProps {
@@ -27,7 +27,7 @@ export function AgentProcess({ activities, taskStatus, status }: AgentProcessPro
           {activities.map((item) => (
             <li key={item.id}>
               <span>{activityDisplayName(item.actor)}</span>
-              <span>{item.activity}</span>
+              <span>{activityLabel(item.activity)}</span>
               {item.detail && <small>{item.detail}</small>}
             </li>
           ))}

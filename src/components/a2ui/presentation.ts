@@ -49,3 +49,20 @@ export function activityDisplayName(actor: string): string {
   if (/^ui$/i.test(actor)) return '结果呈现'
   return actor
 }
+
+
+export function activityLabel(activity: string): string {
+  const labels: Array<[RegExp, string]> = [
+    [/Task requirements analyzed/i, '分析研究需求'],
+    [/Discovered via Agent Card/i, '匹配研究能力'],
+    [/A2A delegation started/i, '启动专业研究'],
+    [/Calling MCP tool/i, '获取研究数据'],
+    [/Aggregating specialist results/i, '汇总研究结果'],
+    [/Generating A2UI/i, '组织研究结果'],
+    [/Unavailable/i, '暂不可用'],
+    [/Complete/i, '已完成'],
+    [/Working/i, '正在研究'],
+    [/Ready/i, '研究就绪'],
+  ]
+  return labels.find(([pattern]) => pattern.test(activity))?.[1] ?? activity
+}
