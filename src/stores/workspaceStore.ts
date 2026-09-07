@@ -153,7 +153,10 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       const semantic = isSemanticAction(action.name)
       const filtering = action.name === 'apply_filters'
       const drill = semantic && !filtering
-      const inlineComposer = action.name.startsWith('composer_')
+      // Add/remove actions mutate the Composer in place. composer_start is a
+      // transition to a new research surface, so the first generated surface
+      // replaces the Composer instead of sharing its component graph.
+      const inlineComposer = action.name.startsWith('composer_') && action.name !== 'composer_start'
       const target = String(action.context.metric ?? action.context.segment ?? action.context.risk ?? action.context.period ?? action.context.company ?? '详情')
       set({
         isGenerating: true,

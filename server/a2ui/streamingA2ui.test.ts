@@ -44,6 +44,28 @@ describe('StreamingA2uiState', () => {
     expect(state.hasSubstantiveContent).toBe(true)
   })
 
+  it('does not treat empty research shells as substantive content', () => {
+    const state = new StreamingA2uiState()
+    state.prepareMessage(update([
+      { component: 'Chart', id: 'empty-chart', data: [] },
+      { component: 'Table', id: 'empty-table', columns: [], rows: [] },
+      { component: 'ResearchSummary', id: 'empty-summary', summary: '', keyPoints: [] },
+      { component: 'Column', id: 'root', children: [{ id: 'empty-chart' }, { id: 'empty-table' }, { id: 'empty-summary' }] },
+    ]))
+
+    expect(state.hasSubstantiveContent).toBe(false)
+  })
+
+  it('accepts populated analysis components as substantive content', () => {
+    const state = new StreamingA2uiState()
+    state.prepareMessage(update([
+      { component: 'Chart', id: 'chart', data: [{ period: 'Q1', value: 1 }] },
+      { component: 'Column', id: 'root', children: [{ id: 'chart' }] },
+    ]))
+
+    expect(state.hasSubstantiveContent).toBe(true)
+  })
+
   it('keeps nested children out of the authoritative final root', () => {
     const state = new StreamingA2uiState()
     state.prepareMessage(update([

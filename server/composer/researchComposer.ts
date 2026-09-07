@@ -314,12 +314,14 @@ export async function runResearchComposerAction(action: AgentActionPayload, emit
       emit({ type: 'error', error: '请至少选择一个研究方向' })
       return
     }
+    // The Composer is an input surface; the generated research result starts a
+    // fresh UI lifecycle. Reusing the Composer surface would make both flows
+    // compete for the same "root" component and component ids.
     await runAutonomousResearch(
       researchRequest(state),
       emit,
       state.selected,
       crypto.randomUUID(),
-      surfaceId,
     )
     return
   }

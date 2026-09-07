@@ -1,6 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { isResearchComposerRequest } from './researchComposer.js'
+const mocks = vi.hoisted(() => ({
+  runAutonomousResearch: vi.fn(async () => undefined),
+}))
+
+vi.mock('../agent/researchAgent.js', () => ({
+  runAutonomousResearch: mocks.runAutonomousResearch,
+}))
+
+import { isResearchComposerRequest, runResearchComposerAction } from './researchComposer.js'
 
 describe('isResearchComposerRequest', () => {
   it('recognizes product-facing custom research wording', () => {
@@ -12,5 +20,30 @@ describe('isResearchComposerRequest', () => {
   it('does not intercept ordinary automatic research requests', () => {
     expect(isResearchComposerRequest('全面分析 NVIDIA 的财务和技术')).toBe(false)
     expect(isResearchComposerRequest('比较 NVIDIA 和 AMD')).toBe(false)
+  })
+})
+
+describe('composer_start', () => {
+  it('starts the generated research on a fresh surface instead of reusing the Composer surface', async () => {
+    mocks.runAutonomousResearch.mockClear()
+    const emit = vi.fn()
+
+    await runResearchComposerAction({
+      name: 'composer_start',
+      surfaceId: 'composer-existing',
+      context: {
+        company: 'NVIDIA',
+        selected: ['financial', 'technology'],
+        comparison: '',
+      },
+    }, emit)
+
+    expect(mocks.runAutonomousResearch).toHaveBeenCalledTimes(1)
+    const args = mocks.runAutonomousResearch.mock.calls[0]
+    expect(args).toHaveLength(4)
+    expect(args[0]).toContain('NVIDIA')
+    expect(args[1]).toBe(emit)
+    expect(args[2]).toEqual(['financial', 'technology'])
+    expect(typeof args[3]).toBe('string')
   })
 })

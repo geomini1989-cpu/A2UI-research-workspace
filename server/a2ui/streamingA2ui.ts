@@ -2,16 +2,34 @@ import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 
 type Component = Record<string, unknown>
 
-const SUBSTANTIVE_COMPONENTS = new Set([
-  'MetricCard',
-  'ComparisonCard',
-  'StockOverview',
-  'ResearchSummary',
-  'RiskBadge',
-  'InsightList',
-  'Table',
-  'Chart',
-])
+function isMeaningfulResearchComponent(component: Component): boolean {
+  switch (component.component) {
+    case 'MetricCard':
+      return typeof component.title === 'string'
+        && component.title.trim().length > 0
+        && typeof component.value === 'string'
+        && component.value.trim().length > 0
+    case 'ComparisonCard':
+      return Array.isArray(component.rows) && component.rows.length > 0
+    case 'StockOverview':
+      return typeof component.company === 'string' && component.company.trim().length > 0
+    case 'ResearchSummary':
+      return (typeof component.summary === 'string' && component.summary.trim().length > 0)
+        || (Array.isArray(component.keyPoints) && component.keyPoints.length > 0)
+    case 'RiskBadge':
+      return typeof component.level === 'string'
+        && ((typeof component.label === 'string' && component.label.trim().length > 0)
+          || (typeof component.description === 'string' && component.description.trim().length > 0))
+    case 'InsightList':
+      return Array.isArray(component.items) && component.items.length > 0
+    case 'Table':
+      return Array.isArray(component.rows) && component.rows.length > 0
+    case 'Chart':
+      return Array.isArray(component.data) && component.data.length > 0
+    default:
+      return false
+  }
+}
 
 function childIds(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -35,7 +53,7 @@ function childIds(value: unknown): string[] {
 export class StreamingA2uiState {
   private readonly componentIds = new Set<string>()
   private readonly nestedReferences = new Set<string>()
-  private readonly componentTypes = new Set<string>()
+  private meaningfulResearchContent = false
   private readonly rootChildIds: string[] = []
   private readonly rootChildSet = new Set<string>()
   private root: Component | null = null
@@ -59,7 +77,7 @@ export class StreamingA2uiState {
   }
 
   get hasSubstantiveContent() {
-    return [...this.componentTypes].some((name) => SUBSTANTIVE_COMPONENTS.has(name))
+    return this.meaningfulResearchContent
   }
 
   prepareMessage(message: A2uiMessage): A2uiMessage {
@@ -71,7 +89,7 @@ export class StreamingA2uiState {
     // root safely reference a sibling component even when root appears first.
     for (const component of components) {
       if (typeof component.id === 'string') this.componentIds.add(component.id)
-      if (typeof component.component === 'string') this.componentTypes.add(component.component)
+      if (isMeaningfulResearchComponent(component)) this.meaningfulResearchContent = true
       if (component.component === 'Badge' && typeof component.label === 'string' && component.label.includes('MCP')) {
         this.sourceSeen = true
       }

@@ -82,6 +82,8 @@ function describeError(err: unknown): string {
       case 'EMPTY_RESPONSE':
       case 'INVALID_RESPONSE':
         return 'DeepSeek 没有返回可用的最终答案，自动重试后仍为空，请稍后再试。'
+      case 'INCOMPLETE_A2UI':
+        return '研究已完成，但生成的界面缺少可展示的分析内容。请重试当前研究。'
       default:
         return `DeepSeek 请求失败：${err.message}`
     }
