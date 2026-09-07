@@ -42,6 +42,7 @@ import { BUSINESS_COMPONENTS } from './businessComponents'
 import { DetailDrawer } from './DetailDrawer'
 import { needsChartDetail, needsTableDetail, TABLE_PREVIEW_ROWS } from './presentation'
 import { createMockMetricDetail, subscribeMetricChartDetail, type MetricChartDetail } from './metricChartInteraction'
+import { isResearchInteraction } from './actionPolicy'
 import { cn } from '@/lib/utils'
 import { Badge as ShadcnBadge } from '@/components/ui/badge'
 import { Button as ShadcnButton } from '@/components/ui/button'
@@ -481,6 +482,7 @@ const Table = createComponentImplementation(
   ({ props, context }: any) => {
     const columns: { key: string; label?: string }[] = props.columns ?? []
     const rows: Record<string, unknown>[] = props.rows ?? []
+    const rowAction = isResearchInteraction(props.rowAction) ? props.rowAction : undefined
     const detail = needsTableDetail(rows.length, columns.length)
     const previewRows = detail ? rows.slice(0, TABLE_PREVIEW_ROWS) : rows
 
@@ -496,7 +498,7 @@ const Table = createComponentImplementation(
         </TableHeader>
         <TableBody>
           {visibleRows.map((row, i) => (
-            <TableRow key={i} className={props.rowAction ? 'genui-interactive' : undefined} tabIndex={props.rowAction ? 0 : undefined} onClick={() => dispatchSemantic(context, props.rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)])))} onKeyDown={(event) => { if (props.rowAction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dispatchSemantic(context, props.rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))) } }}>
+            <TableRow key={i} className={rowAction ? 'genui-interactive' : undefined} tabIndex={rowAction ? 0 : undefined} onClick={() => dispatchSemantic(context, rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)])))} onKeyDown={(event) => { if (rowAction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dispatchSemantic(context, rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))) } }}>
               {columns.map((c, index) => (
                 <TableCell key={c.key} data-col-index={index}>{String(row[c.key] ?? '—')}</TableCell>
               ))}

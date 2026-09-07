@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { DetailDrawer } from './DetailDrawer'
 import { TABLE_PREVIEW_ROWS } from './presentation'
-import { createMockMetricDetail } from './metricChartInteraction'
+import { hasInlineMetricDetail, isResearchInteraction } from './actionPolicy'
 
 const weight = z.number().optional()
 const SemanticAction = z.object({
@@ -52,36 +52,47 @@ export const MetricCard = createComponentImplementation(
   },
   ({ props, context }: any) => {
     const [expanded, setExpanded] = React.useState(false)
-    const interactive = Boolean(props.action || props.detail)
-    const fallback = props.detail ? createMockMetricDetail(props.title, props.value) : null
+    const researchAction = isResearchInteraction(props.action) ? props.action : undefined
+    const inlineDetail = hasInlineMetricDetail(props.detail)
+    const interactive = Boolean(researchAction || inlineDetail)
     const detailTitle = props.detail?.title ?? `${props.title} · 关键补充`
-    const detailSummary = props.detail
-      ? compactText(props.detail.summary ?? fallback?.summary ?? '', 84)
-      : ''
-    const detailPoints: string[] = Array.isArray(props.detail?.keyPoints)
+    const detailSummary = inlineDetail ? compactText(props.detail?.summary ?? '', 84) : ''
+    const detailPoints: string[] = inlineDetail && Array.isArray(props.detail?.keyPoints)
       ? props.detail.keyPoints.slice(0, 2).map((point: string) => compactText(point, 56))
       : []
 
-    const click = () => {
-      if (props.action?.event.context?.interactionMode === 'research') {
-        dispatch(context, props.action)
-        return
-      }
-      if (props.detail) {
-        setExpanded((current) => !current)
-        return
-      }
-      dispatch(context, props.action)
-    }
-
-    return <div className="genui-metric-wrap" style={weightStyle(props.weight)}>
-      <button type="button" className={cn('genui-metric', interactive && 'genui-interactive')} onClick={click} aria-expanded={expanded} aria-label={`查看${props.title}关键补充`}>
+    const content = (
+      <>
         <div className="genui-metric__label">{props.title ?? '—'}</div>
         <div className="genui-metric__value">{props.value ?? '—'}</div>
         {props.change && <div className={cn('genui-metric__change', changeClass(props.change))}>{props.change}</div>}
         {props.description && <div className="genui-metric__description">{compactText(props.description, 48)}</div>}
-      </button>
-      {expanded && (
+      </>
+    )
+
+    const click = () => {
+      if (researchAction) {
+        dispatch(context, researchAction)
+        return
+      }
+      if (inlineDetail) setExpanded((current) => !current)
+    }
+
+    return <div className="genui-metric-wrap" style={weightStyle(props.weight)}>
+      {interactive ? (
+        <button
+          type="button"
+          className="genui-metric genui-interactive"
+          onClick={click}
+          aria-expanded={inlineDetail ? expanded : undefined}
+          aria-label={researchAction ? `追问${props.title}` : `查看${props.title}关键补充`}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className="genui-metric">{content}</div>
+      )}
+      {inlineDetail && expanded && (
         <section className="genui-inline-detail" aria-live="polite">
           <strong>{detailTitle}</strong>
           {detailSummary && <p>{detailSummary}</p>}
@@ -113,13 +124,16 @@ export const ComparisonCard = createComponentImplementation(
           <div role="columnheader">{left}</div>
           <div role="columnheader">{right}</div>
         </div>
-        {visibleRows.map((row, index) => (
-          <div key={index} className={cn('genui-comparison__row', props.rowAction && 'genui-interactive')} role="row" tabIndex={props.rowAction ? 0 : undefined} onClick={() => dispatch(context, props.rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)])))} onKeyDown={(event) => { if (props.rowAction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dispatch(context, props.rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))) } }}>
+        {visibleRows.map((row, index) => {
+          const rowAction = isResearchInteraction(props.rowAction) ? props.rowAction : undefined
+          return (
+          <div key={index} className={cn('genui-comparison__row', rowAction && 'genui-interactive')} role="row" tabIndex={rowAction ? 0 : undefined} onClick={() => dispatch(context, rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)])))} onKeyDown={(event) => { if (rowAction && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); dispatch(context, rowAction, Object.fromEntries(Object.entries(row).map(([key, value]) => [key, String(value)]))) } }}>
             <div role="rowheader">{String(row.metric ?? '—')}</div>
             <div role="cell">{String(row.left ?? '—')}</div>
             <div role="cell">{String(row.right ?? '—')}</div>
           </div>
-        ))}
+          )
+        })}
       </div>
     )
     return (
@@ -147,21 +161,31 @@ export const StockOverview = createComponentImplementation(
       change: z.string().optional(), marketCap: z.string().optional(), action: SemanticAction.optional(), weight,
     }),
   },
-  ({ props, context }: any) => (
-    <button type="button" className={cn('genui-stock', props.action && 'genui-interactive')} style={weightStyle(props.weight)} onClick={() => dispatch(context, props.action)}>
-      <div>
-        <div className="genui-stock__identity">
-          <strong>{props.company ?? '未知公司'}</strong>
-          {props.ticker && <span>{props.ticker}</span>}
+  ({ props, context }: any) => {
+    const action = isResearchInteraction(props.action) ? props.action : undefined
+    const content = (
+      <>
+        <div>
+          <div className="genui-stock__identity">
+            <strong>{props.company ?? '未知公司'}</strong>
+            {props.ticker && <span>{props.ticker}</span>}
+          </div>
+          {props.change && <div className={cn('genui-stock__change', changeClass(props.change))}>{props.change}</div>}
         </div>
-        {props.change && <div className={cn('genui-stock__change', changeClass(props.change))}>{props.change}</div>}
-      </div>
-      <div className="genui-stock__price">
-        <strong>{props.price ?? '—'}</strong>
-        {props.marketCap && <span>市值 {props.marketCap}</span>}
-      </div>
-    </button>
-  ),
+        <div className="genui-stock__price">
+          <strong>{props.price ?? '—'}</strong>
+          {props.marketCap && <span>市值 {props.marketCap}</span>}
+        </div>
+      </>
+    )
+    return action ? (
+      <button type="button" className="genui-stock genui-interactive" style={weightStyle(props.weight)} onClick={() => dispatch(context, action)}>
+        {content}
+      </button>
+    ) : (
+      <div className="genui-stock" style={weightStyle(props.weight)}>{content}</div>
+    )
+  },
 )
 
 export const ResearchSummary = createComponentImplementation(
@@ -197,14 +221,22 @@ export const RiskBadge = createComponentImplementation(
   ({ props, context }: any) => {
     const level = String(props.level || 'MEDIUM').toUpperCase()
     const state = level === 'HIGH' ? 'danger' : level === 'LOW' ? 'success' : 'warning'
-    return (
-      <button type="button" className={cn('genui-risk', props.action && 'genui-interactive')} data-state={state} style={weightStyle(props.weight)} onClick={() => dispatch(context, props.action)}>
+    const action = isResearchInteraction(props.action) ? props.action : undefined
+    const content = (
+      <>
         <span>{level}</span>
         <div>
           {props.label && <strong>{props.label}</strong>}
           {props.description && <p>{compactText(props.description, 64)}</p>}
         </div>
+      </>
+    )
+    return action ? (
+      <button type="button" className="genui-risk genui-interactive" data-state={state} style={weightStyle(props.weight)} onClick={() => dispatch(context, action)}>
+        {content}
       </button>
+    ) : (
+      <div className="genui-risk" data-state={state} style={weightStyle(props.weight)}>{content}</div>
     )
   },
 )

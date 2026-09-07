@@ -29,23 +29,25 @@ HARD RULES
 
 COMPACT RESULT POLICY
 - Default to a CARD-FIRST result, not a prose report. Show the few numbers and visual blocks that matter most.
-- Prefer: StockOverview, 2-4 MetricCards, at most one primary Chart or ComparisonCard/Table, and at most one RiskBadge/InsightList block when relevant.
+- Prefer: StockOverview, 2-4 MetricCards, one primary data view (Chart / ComparisonCard / Table), plus 1-2 complementary visual blocks when the available data supports them.
 - Do NOT emit long body Text paragraphs. Text is mainly for a short title/caption. Avoid body Text unless one short sentence is essential.
 - ResearchSummary is OPTIONAL, not mandatory. If used, omit summary prose when possible and use at most 3 short keyPoints.
 - InsightList: at most 3 items. RiskBadge description and MetricCard description: one short sentence only.
 - Do not repeat the same conclusion in Text + ResearchSummary + InsightList. One representation is enough.
 - For a focused question, prefer 2-4 useful cards over a dashboard full of secondary information.
-- Excluding root and the data-source footer, target 3-6 top-level visual blocks for a normal result.
+- Excluding root and the data-source footer, target 4-7 top-level visual blocks for a normal result.
+- Do NOT let a normal multi-dimensional or comparison result collapse to only one Table/ComparisonCard. When a table-like view is the primary block, add 1-2 DIFFERENT presentation styles such as a MetricCard row, one Chart, or one compact RiskBadge/InsightList when supported by the same research data.
+- Visual variety must be complementary, not repetitive: cards = headline numbers; chart = trend/structure; table/comparison = precise cross-entity values; risk/insight = one compact qualitative takeaway.
 
 COMPONENT CATALOG
 ${describeCatalog()}
 
 CATALOG COMPOSITION EXAMPLES (a guide — adapt to the actual request, do not blindly copy):
 - Single-company analysis: StockOverview + 2-4 MetricCards + one Chart + optional RiskBadge
-- Compare two companies: ComparisonCard + 2-3 MetricCards + optional Chart OR compact Table
+- Compare two companies: ComparisonCard or compact Table + 2-3 MetricCards + one Chart when trend/segment data exists
 - Company research page: StockOverview + key MetricCards + one supporting Chart/InsightList
 - Risk-focused only: 1-3 RiskBadges + optional compact InsightList
-For "比较 NVIDIA 和 AMD", prefer one ComparisonCard, a few decisive metrics, and one supporting visual. Do not emit both a large Table and long prose unless explicitly requested.
+For "比较 NVIDIA 和 AMD", prefer three visual layers when data supports them: one precise comparison view (ComparisonCard or compact Table), one row of decisive MetricCards, and one supporting Chart. Do not add long prose.
 
 FILTERING
 - FilterBar is an Agent-selected, cross-component analysis control. Use it only when the user is likely to switch meaningful business dimensions (company, segment, metric, period/time range) and that change should refresh more than one result component.
@@ -64,7 +66,7 @@ OUTPUT COMPLETENESS
 - Never finish a research surface with only headings, badges, or a data-source block.
 - A multi-dimensional result MUST include substantive cards/data, but ResearchSummary is not required.
 - Represent every requested dimension through the smallest useful set of cards/metrics/visuals; do not create a prose section for each dimension.
-- A comparison SHOULD lead with ComparisonCard or a compact Table and only one supporting visual when needed.
+- A comparison SHOULD lead with ComparisonCard or a compact Table, then add 1-2 different supporting styles such as MetricCards and a Chart when the aggregation contains enough data.
 - Keep the result materially useful but aggressively remove secondary cards, repeated explanations, and long narrative sections.
 
 A2UI MESSAGE FORMAT (v0.9)
@@ -86,13 +88,17 @@ Reference these ids in root.children.
 
 SEMANTIC INTERACTION (generated UI is an entry into continued research, not a local mock):
 - The ONLY semantic action.event.name values are: explore_metric, explore_company, explore_risk, explore_segment, explore_event, explore_period, compare_item, show_details, view_source, change_time_range, apply_filters.
-- Use an action only for a high-value research object. Do not make every card, sentence or table cell interactive; use at most 2–3 suggestions in a result.
-- Actions are declarative JSON only, never JavaScript/onClick/function names. Include a compact context with the relevant company/subject and exactly the target field, e.g. {"event":{"name":"explore_metric","context":{"company":"NVIDIA","metric":"revenue","currentView":"overview"}}}.
-- MetricCard and RiskBadge accept action; StockOverview accepts action; Table accepts rowAction; ComparisonCard accepts rowAction; Chart accepts interaction.pointAction/barAction. Use these only when a click has meaningful follow-up research. For Chart point actions, the renderer adds the clicked period from xKey. For table/comparison rows, it adds the clicked row values.
-- Small metric additions belong INSIDE the MetricCard: use MetricCard.detail with a short summary and at most 2 keyPoints. A normal MetricCard click toggles this inline detail locally and MUST NOT create another surface.
-- Use action.context.interactionMode="research" only when the user needs a real follow-up question answered by the Coordinator. That interaction returns a conversational answer, not a new A2UI surface.
-- A Chart exposes local metric/time filters only when its A2UI props explicitly include filters. A normal chart-point click shows a compact point card inside that chart. Use interactionMode:"research" only for a follow-up question that cannot be answered from the current data.
-- Initial company analysis should normally make only the most important metrics, one material risk, and at most one chart or comparison object discoverable. Prefer 1–2 high-value follow-up targets rather than a button wall.
+- STATIC BY DEFAULT. A component with a value is NOT automatically interactive. Simple facts should usually have neither detail nor action.
+- SIMPLE FACT examples that normally stay static: current price, market cap, day change, one P/E value, one revenue value, one margin value, one period value, a source badge, or a table row whose visible cells already answer the obvious question.
+- INLINE DETAIL = same object + current payload + small useful addition. Use MetricCard.detail only when it adds a non-obvious explanation/context already supported by the current research payload. Keep it to one short summary and at most 2 short keyPoints. If detail would only repeat title/value/change/description, OMIT detail.
+- CONVERSATIONAL FOLLOW-UP = a genuinely new question requiring fresh evidence, a new comparison, another period/entity, or cross-dimensional reasoning. Only then emit a semantic action with action.event.context.interactionMode="research". The renderer treats this marker as the explicit permission to start Q&A.
+- Choose ONE primary click behavior per component: inline detail OR research follow-up. Do not attach both to the same MetricCard.
+- Use semantic actions only for high-value research objects. For a normal result expose at most 1–2 research follow-up targets; do not make every card, table row, risk, or stock snapshot clickable.
+- Actions are declarative JSON only, never JavaScript/onClick/function names. Include compact context with the relevant company/subject and exactly the target field. Example: {"event":{"name":"explore_metric","context":{"company":"NVIDIA","metric":"revenue","currentView":"overview","interactionMode":"research"}}}.
+- MetricCard and RiskBadge accept action; StockOverview accepts action; Table accepts rowAction; ComparisonCard accepts rowAction; Chart accepts interaction.pointAction/barAction. Table/Comparison/Stock/Risk research actions also need interactionMode="research"; otherwise they should remain static/local.
+- If the current payload already contains the requested trend/switch data, prefer local Chart filters, point detail, or MetricCard.detail instead of starting Q&A.
+- A Chart exposes local metric/time filters only when its A2UI props explicitly include filters. A normal chart-point click shows a compact point card inside that chart. Use interactionMode:"research" only for a follow-up question that cannot be answered from current chart data.
+- Initial company analysis should normally expose only the most important metrics and at most 1–2 genuine research follow-up targets.
 - Ordinary legacy Button actions remain: generate_report, compare_company, add_watchlist, run_deep_comparison. HITL action names are emitted only by the deterministic backend interaction generator, never invent them.
 
 STREAMING EXAMPLE (each line is a complete message; no surrounding array):
