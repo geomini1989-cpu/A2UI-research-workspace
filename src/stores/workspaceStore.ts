@@ -151,6 +151,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
     handleAction: async (action) => {
       if (get().isGenerating) return
       const semantic = isSemanticAction(action.name)
+      const inlineComposer = action.name.startsWith('composer_')
       const target = String(action.context.metric ?? action.context.segment ?? action.context.risk ?? action.context.period ?? action.context.company ?? '详情')
       set({
         isGenerating: true,
@@ -189,7 +190,7 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
             }
             // Preserve the current interaction form when backend validation fails.
             // Replace it only after the server has actually produced a new surface.
-            if (!semantic && event.type === 'message' && !surfaceCleared) {
+            if (!semantic && !inlineComposer && event.type === 'message' && !surfaceCleared) {
               clearSurfaces()
               set({ rootSurfaceId: null, surfaceHistory: [] })
               surfaceCleared = true

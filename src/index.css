@@ -163,50 +163,133 @@
 }
 
 .conversation-welcome {
-  width: min(100%, 44rem);
-  margin: clamp(2rem, 11vh, 7rem) auto 0;
+  position: relative;
+  width: min(100%, 58rem);
+  margin: clamp(1.5rem, 8vh, 5rem) auto 0;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--border) 78%, transparent);
+  border-radius: calc(var(--radius) + 0.75rem);
+  background:
+    radial-gradient(circle at 12% 0%, color-mix(in oklab, var(--accent) 82%, transparent), transparent 36%),
+    linear-gradient(180deg, color-mix(in oklab, var(--card) 96%, transparent), var(--background));
+  box-shadow: 0 18px 50px color-mix(in oklab, var(--foreground) 5%, transparent);
 }
 
-.conversation-welcome > p {
-  margin-bottom: 0.5rem;
+.conversation-welcome::after {
+  content: '';
+  position: absolute;
+  inset: auto -8rem -11rem auto;
+  width: 20rem;
+  height: 20rem;
+  border: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.conversation-welcome__eyebrow {
+  width: fit-content;
+  margin-bottom: 0.9rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
   color: var(--muted-foreground);
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  background: color-mix(in oklab, var(--background) 82%, transparent);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.055em;
   text-transform: uppercase;
 }
 
 .conversation-welcome h2 {
-  margin-bottom: 1.5rem;
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  font-weight: 560;
-  letter-spacing: -0.035em;
+  max-width: 13ch;
+  margin: 0;
+  font-size: clamp(2rem, 6vw, 3.4rem);
+  font-weight: 610;
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+  text-wrap: balance;
 }
 
-.conversation-welcome > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.conversation-welcome button {
-  min-height: 2.75rem;
-  padding: 0.65rem 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+.conversation-welcome__copy {
+  max-width: 42rem;
+  margin-top: 1rem;
   color: var(--muted-foreground);
-  background: transparent;
-  font-size: 0.8125rem;
-  text-align: left;
-  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+  font-size: 0.9375rem;
+  line-height: 1.7;
 }
 
-.conversation-welcome button:hover,
-.conversation-welcome button:focus-visible {
+.conversation-starters {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: clamp(1.5rem, 4vw, 2.25rem);
+}
+
+.conversation-starters button {
+  display: flex;
+  min-height: 11rem;
+  padding: 1rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 0.3rem);
   color: var(--foreground);
+  background: color-mix(in oklab, var(--background) 88%, transparent);
+  text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.conversation-starters button:hover,
+.conversation-starters button:focus-visible {
+  transform: translateY(-2px);
   border-color: var(--ring);
-  background: var(--accent);
+  background: var(--card);
+  box-shadow: 0 10px 24px color-mix(in oklab, var(--foreground) 7%, transparent);
   outline: none;
+}
+
+.conversation-starter__label {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+}
+
+.conversation-starters strong {
+  font-size: 0.95rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.conversation-starter__description {
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.conversation-starter__action {
+  margin-top: auto;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 620;
+}
+
+@media (max-width: 760px) {
+  .conversation-welcome {
+    padding: 1.25rem;
+  }
+
+  .conversation-starters {
+    grid-template-columns: 1fr;
+  }
+
+  .conversation-starters button {
+    min-height: 8.5rem;
+  }
 }
 
 .conversation-messages {

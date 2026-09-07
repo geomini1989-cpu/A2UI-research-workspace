@@ -2,6 +2,7 @@ import type { FastifyReply, FastifyInstance } from 'fastify'
 import type { AgentEvent, Emit } from '../agent/researchAgent.js'
 import { runResearchAgent, runResearchAgentAction } from '../agent/researchAgent.js'
 import { isResearchJobAction, isResearchJobRequest, runResearchJobAction, runResearchJobRequest } from '../researchJobs/researchJobFlow.js'
+import { isResearchComposerAction, isResearchComposerRequest, runResearchComposerAction, runResearchComposerRequest } from '../composer/researchComposer.js'
 
 interface Ndjson {
   emit: Emit
@@ -57,7 +58,12 @@ export async function chatRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'message is required' })
     }
     const { emit, finish } = beginNdjson(reply)
-    launch(isResearchJobRequest(body.message) ? runResearchJobRequest(body.message, emit) : runResearchAgent(body.message, emit), finish)
+    const runner = isResearchJobRequest(body.message)
+      ? runResearchJobRequest(body.message, emit)
+      : isResearchComposerRequest(body.message)
+        ? runResearchComposerRequest(body.message, emit)
+        : runResearchAgent(body.message, emit)
+    launch(runner, finish)
   })
 
   app.post('/api/action', async (req, reply) => {
@@ -80,6 +86,11 @@ export async function chatRoutes(app: FastifyInstance) {
           : {},
     }
     const { emit, finish } = beginNdjson(reply)
-    launch(isResearchJobAction(action.name) ? runResearchJobAction(action, emit) : runResearchAgentAction(action, emit), finish)
+    const runner = isResearchJobAction(action.name)
+      ? runResearchJobAction(action, emit)
+      : isResearchComposerAction(action.name)
+        ? runResearchComposerAction(action, emit)
+        : runResearchAgentAction(action, emit)
+    launch(runner, finish)
   })
 }

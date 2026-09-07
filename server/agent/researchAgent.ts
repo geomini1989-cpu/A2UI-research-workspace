@@ -295,12 +295,12 @@ async function runCoordinatorResearch(
   })
 }
 
-export async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID()): Promise<void> {
+export async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID(), surfaceIdOverride?: string): Promise<void> {
   emit({ type: 'task_state', state: 'RUNNING', taskId })
   const requirement = dimensions ? requirementForDimensions(dimensions) : analyzeTaskRequirements(userMessage)
   emitOrchestrationActivity(emit, { stage: 'planning', actor: 'Research Coordinator', detail: requirement.requiredSkills.length ? `Required skills: ${requirement.requiredSkills.join(', ')}` : 'No specialist skills required' })
   const plan = createDelegationPlan(requirement)
-  const surfaceId = `research-${taskId}`
+  const surfaceId = surfaceIdOverride ?? `research-${taskId}`
   console.info(`[Discovery] required skills: ${requirement.requiredSkills.join(', ') || '(none)'}`)
   console.info(`[Discovery] matched: ${plan.delegations.map((item) => item.card.name).join(', ') || '(none)'}`)
   for (const match of plan.delegations) {

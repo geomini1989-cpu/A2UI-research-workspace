@@ -114,6 +114,25 @@ npm run dev
 Open http://localhost:5173 and chat.
 
 
+
+## Research Composer: point-and-build Generative UI
+
+The home screen now exposes a **Research Composer** demo designed to make A2UI behavior visible.
+Instead of immediately producing a report, the user adds and removes research modules such as
+Financial & Valuation, Market & Risk, and Technology & Product. Each click sends an A2UI Action and
+the backend recomposes the **same surface** with `updateDataModel` + `updateComponents`.
+
+Example:
+
+```text
+帮我打开 NVIDIA 研究组合器，我想自己逐项添加研究模块
+```
+
+Adding AMD switches the same surface into comparison mode. The execution preview changes with the
+selected modules, and **Start research** reuses that same surface id for the existing progressive
+Coordinator → Agent Card discovery → A2A → MCP → final A2UI pipeline. This keeps the interaction
+fast before execution while making the Catalog-driven UI composition explicit.
+
 ## Persistent Research Job workflow
 
 The workspace now includes one real write-oriented business flow in addition to read/analysis tasks:

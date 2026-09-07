@@ -15,6 +15,8 @@ export const DEMO_ACTIONS = [
   'generate_report',
   'compare_company',
   'add_watchlist',
+  'composer_add_dimension', 'composer_remove_dimension', 'composer_add_comparison',
+  'composer_remove_comparison', 'composer_start',
   'explore_metric', 'explore_company', 'explore_risk', 'explore_segment',
   'explore_event', 'explore_period', 'compare_item', 'show_details',
   'view_source', 'change_time_range',

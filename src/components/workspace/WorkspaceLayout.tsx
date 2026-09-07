@@ -14,8 +14,8 @@ export function WorkspaceLayout() {
       <header className="host-header">
         <div className="host-header__inner">
           <div className="flex min-w-0 items-baseline gap-2">
-            <h1>研究助手</h1>
-            <span>演示版</span>
+            <h1>研究工作台</h1>
+            <span>A2UI · Generative UI</span>
           </div>
           <div className="flex items-center gap-1">
             <ThemeToggle />
