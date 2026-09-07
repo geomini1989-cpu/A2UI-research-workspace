@@ -197,7 +197,7 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
     })
   }
 
-  const agents = state.selected.map((dimension) => MODULES[dimension].agent)
+  const selectedLabels = state.selected.map((dimension) => MODULES[dimension].title)
   addRoot({
     component: 'Card',
     id: 'routing-preview',
@@ -208,9 +208,9 @@ function composerMessages(state: ComposerState, surfaceId: string, create: boole
     component: 'Text',
     id: 'routing-text',
     variant: 'body',
-    text: agents.length
-      ? `预计调用：${agents.join(' · ')}${state.comparison ? ` · 对比 ${state.company} / ${state.comparison}` : ''}`
-      : '加入研究模块后，这里会实时显示预计调用的专业 Agent。',
+    text: selectedLabels.length
+      ? `本次将覆盖：${selectedLabels.join(' · ')}${state.comparison ? ` · 对比 ${state.company} / ${state.comparison}` : ''}`
+      : '选择研究方向后，这里会显示本次研究范围。',
   })
 
   if (state.selected.length > 0) {
@@ -268,7 +268,7 @@ function researchRequest(state: ComposerState): string {
 }
 
 export function isResearchComposerRequest(message: string): boolean {
-  return /研究方案|研究方案|研究菜单|research\s+composer|research\s+plan/i.test(message)
+  return /研究组合器|研究方案|研究菜单|research\s+composer|research\s+plan/i.test(message)
 }
 
 export function isResearchComposerAction(name: string): boolean {
