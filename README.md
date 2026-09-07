@@ -113,6 +113,33 @@ npm run dev
 
 Open http://localhost:5173 and chat.
 
+
+## Persistent Research Job workflow
+
+The workspace now includes one real write-oriented business flow in addition to read/analysis tasks:
+**create → edit → save draft → submit → start research**.
+
+Example:
+
+```text
+帮我创建一个 NVIDIA 深度研究任务，重点研究财务和技术，暂时不要执行
+```
+
+The Coordinator returns an A2UI form for company, dimensions, depth and extra instructions. **Save draft**
+persists the job on the backend under `.data/research-jobs.json`; **Submit** moves the authoritative job
+state from `DRAFT` to `SUBMITTED`. A repeated submit for the same job id is idempotent. **Start research**
+then reuses the existing Coordinator → Agent Card discovery → A2A specialists → MCP → progressive A2UI
+pipeline and records `RUNNING / COMPLETED / FAILED` on the job.
+
+To demonstrate persistence after a browser refresh or server restart, use the id shown in the form:
+
+```text
+打开研究任务 RJ-20260907-XXXXXXXX
+```
+
+This is intentionally a small file-backed business service rather than a database/framework migration.
+It proves the write-operation boundary and task lifecycle while keeping the research architecture unchanged.
+
 ## Human-in-the-loop
 
 HITL is exception-based, not the default. The Coordinator applies an autonomy-first policy:

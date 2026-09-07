@@ -295,7 +295,7 @@ async function runCoordinatorResearch(
   })
 }
 
-async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID()): Promise<void> {
+export async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID()): Promise<void> {
   emit({ type: 'task_state', state: 'RUNNING', taskId })
   const requirement = dimensions ? requirementForDimensions(dimensions) : analyzeTaskRequirements(userMessage)
   emitOrchestrationActivity(emit, { stage: 'planning', actor: 'Research Coordinator', detail: requirement.requiredSkills.length ? `Required skills: ${requirement.requiredSkills.join(', ')}` : 'No specialist skills required' })

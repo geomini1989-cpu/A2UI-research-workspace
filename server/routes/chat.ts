@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyInstance } from 'fastify'
 import type { AgentEvent, Emit } from '../agent/researchAgent.js'
 import { runResearchAgent, runResearchAgentAction } from '../agent/researchAgent.js'
+import { isResearchJobAction, isResearchJobRequest, runResearchJobAction, runResearchJobRequest } from '../researchJobs/researchJobFlow.js'
 
 interface Ndjson {
   emit: Emit
@@ -56,7 +57,7 @@ export async function chatRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'message is required' })
     }
     const { emit, finish } = beginNdjson(reply)
-    launch(runResearchAgent(body.message, emit), finish)
+    launch(isResearchJobRequest(body.message) ? runResearchJobRequest(body.message, emit) : runResearchAgent(body.message, emit), finish)
   })
 
   app.post('/api/action', async (req, reply) => {
@@ -69,21 +70,16 @@ export async function chatRoutes(app: FastifyInstance) {
     if (typeof body.name !== 'string' || !body.name.trim()) {
       return reply.status(400).send({ error: 'name is required' })
     }
+    const action = {
+      name: body.name,
+      surfaceId: typeof body.surfaceId === 'string' ? body.surfaceId : undefined,
+      sourceComponentId: typeof body.sourceComponentId === 'string' ? body.sourceComponentId : undefined,
+      context:
+        typeof body.context === 'object' && body.context !== null
+          ? (body.context as Record<string, unknown>)
+          : {},
+    }
     const { emit, finish } = beginNdjson(reply)
-    launch(
-      runResearchAgentAction(
-        {
-          name: body.name,
-          surfaceId: typeof body.surfaceId === 'string' ? body.surfaceId : undefined,
-          sourceComponentId: typeof body.sourceComponentId === 'string' ? body.sourceComponentId : undefined,
-          context:
-            typeof body.context === 'object' && body.context !== null
-              ? (body.context as Record<string, unknown>)
-              : {},
-        },
-        emit,
-      ),
-      finish,
-    )
+    launch(isResearchJobAction(action.name) ? runResearchJobAction(action, emit) : runResearchAgentAction(action, emit), finish)
   })
 }
