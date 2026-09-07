@@ -7,22 +7,22 @@ import { AgentProcess } from './AgentProcess'
 
 const STARTERS = [
   {
-    label: '实时组合',
-    title: '打开 NVIDIA 研究组合器',
-    description: '像点单一样逐项加入财务、市场和技术模块，界面会在同一 A2UI Surface 中实时重组。',
-    prompt: '帮我打开 NVIDIA 研究组合器，我想自己逐项添加研究模块',
+    label: '公司研究',
+    title: '研究 NVIDIA',
+    description: '梳理财务表现、市场变化、技术竞争力与关键风险，并支持继续追问。',
+    prompt: '全面分析 NVIDIA，包含财务、市场和技术，并总结关键风险',
   },
   {
-    label: '动态对比',
-    title: '配置 NVIDIA vs AMD',
-    description: '先进入对比模式，再自由增减研究模块，观察 UI 和 Agent 路由一起变化。',
-    prompt: '帮我打开 NVIDIA 和 AMD 的对比研究组合器',
+    label: '对比分析',
+    title: '比较 NVIDIA 与 AMD',
+    description: '对齐关键指标、竞争优势与风险差异，快速找到值得继续研究的问题。',
+    prompt: '全面比较 NVIDIA 和 AMD，包含财务、市场、技术和关键风险',
   },
   {
-    label: '业务闭环',
+    label: '研究任务',
     title: '创建可保存的研究任务',
-    description: '演示草稿保存、提交和执行，把 Generative UI 接到真实业务状态上。',
-    prompt: '帮我创建一个 NVIDIA 深度研究任务，先保存草稿再提交',
+    description: '选择研究范围和深度，保存草稿，确认后再执行，适合需要持续推进的研究。',
+    prompt: '帮我创建一个 NVIDIA 深度研究任务，重点研究财务和技术，暂时不要执行',
   },
 ]
 
@@ -54,18 +54,19 @@ export function ChatPanel() {
         <div className="conversation-thread">
           {messages.length === 0 && (
             <section className="conversation-welcome" aria-labelledby="welcome-title">
-              <div className="conversation-welcome__eyebrow">A2UI · Generative UI · Multi-Agent</div>
-              <h2 id="welcome-title">把研究像点单一样组合起来</h2>
+              <div className="conversation-welcome__eyebrow">AI Research Workspace</div>
+              <h2 id="welcome-title">从一个问题，得到一份可继续推进的研究</h2>
               <p className="conversation-welcome__copy">
-                先从一个演示入口开始。研究模块、对比对象和执行 Agent 会随着你的选择实时变化。
+                输入公司、对比对象或研究目标。系统会自动组织财务、市场和技术研究，并把结果整理成可交互的指标、图表和结论。
               </p>
-              <div className="conversation-starters" aria-label="推荐演示">
+              <p className="conversation-welcome__notice">当前市场与财务数据为演示研究数据，用于体验研究流程与交互方式。</p>
+              <div className="conversation-starters" aria-label="开始研究">
                 {STARTERS.map((starter) => (
                   <button type="button" key={starter.prompt} onClick={() => sendMessage(starter.prompt)}>
                     <span className="conversation-starter__label">{starter.label}</span>
                     <strong>{starter.title}</strong>
                     <span className="conversation-starter__description">{starter.description}</span>
-                    <span className="conversation-starter__action">开始演示 →</span>
+                    <span className="conversation-starter__action">开始研究 →</span>
                   </button>
                 ))}
               </div>
@@ -73,7 +74,7 @@ export function ChatPanel() {
           )}
           <MessageList messages={messages} />
           {hasResponse && (
-            <section className="assistant-generated" aria-label="Generated research response">
+            <section className="assistant-generated" aria-label="研究结果">
               <A2UIRenderer />
               <AgentProcess activities={activities} taskStatus={taskStatus} status={agentStatus} />
             </section>

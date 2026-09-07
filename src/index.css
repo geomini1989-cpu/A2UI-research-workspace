@@ -347,6 +347,33 @@
   box-shadow: 0 0 0 1px var(--ring);
 }
 
+
+.conversation-welcome__notice {
+  width: fit-content;
+  margin-top: 0.9rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 999px;
+  color: var(--muted-foreground);
+  background: color-mix(in oklab, var(--muted) 72%, transparent);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.genui-filterbar {
+  width: 100%;
+  padding: 0.9rem;
+  border: 1px solid var(--genui-border);
+  border-radius: var(--genui-radius-md);
+  background: color-mix(in oklab, var(--genui-surface-muted) 74%, transparent);
+}
+.genui-filterbar__heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+.genui-filterbar__heading span { display:block; margin-bottom:.15rem; color:var(--genui-text-muted); font-size:.7rem; }
+.genui-filterbar__heading h3 { margin:0; font-size:.9rem; font-weight:650; }
+.genui-filterbar__fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr)); gap:.65rem; margin-top:.8rem; }
+.genui-filterbar__fields label { display:flex; min-width:0; flex-direction:column; gap:.35rem; color:var(--genui-text-muted); font-size:.72rem; }
+.genui-filterbar__fields select { min-height:2.5rem; width:100%; padding:0 .65rem; border:1px solid var(--genui-border); border-radius:var(--genui-radius-sm); color:var(--genui-text); background:var(--genui-surface); font:inherit; }
+.genui-filterbar__apply { min-height:2.5rem; flex:none; padding:0 .85rem; border-radius:var(--genui-radius-sm); color:var(--primary-foreground); background:var(--primary); font-size:.78rem; font-weight:620; }
+
 /* Scoped Generative UI design system ------------------------------------ */
 .genui-root {
   --genui-bg: transparent;
