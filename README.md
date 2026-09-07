@@ -215,6 +215,22 @@ The frontend only displays “Waiting for your input” for a genuine paused int
 > Demo limitation: Human-in-the-loop pending task state is stored in memory. A server restart loses
 > pending tasks. No database or workflow framework is used.
 
+
+## A2UI message-level streaming
+
+Final research UI is generated with DeepSeek streaming enabled. The server buffers token deltas only until a complete top-level A2UI JSON message closes, then immediately validates that message with the A2UI schema and component allow-list and forwards it through the existing NDJSON response stream.
+
+The renderer therefore receives real generation-time updates instead of a fully generated page that is merely replayed afterward. The model is instructed to emit one complete A2UI message object per line and to grow the `root` container only with component ids that already exist. Cached/fallback payloads still use the existing atomic parser.
+
+```text
+DeepSeek SSE tokens
+  -> complete A2UI message
+  -> A2UI schema + catalog allow-list
+  -> /api/chat NDJSON event
+  -> MessageProcessor
+  -> React surface update
+```
+
 ## Conversation-native Generative UI
 
 The demo shell models one reading flow: user message, short assistant transition,
