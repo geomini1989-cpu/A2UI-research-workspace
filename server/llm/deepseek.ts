@@ -59,6 +59,21 @@ interface ChatResponse {
   }[]
 }
 
+interface ChatStreamResponse {
+  choices?: {
+    finish_reason?: string | null
+    delta?: {
+      content?: string | null
+      reasoning_content?: string | null
+      tool_calls?: {
+        index?: number
+        id?: string
+        function?: { name?: string; arguments?: string }
+      }[]
+    }
+  }[]
+}
+
 interface AssistantMessage {
   content: string
   toolCalls: LlmToolCall[]
@@ -89,6 +104,13 @@ function responseError(data: ChatResponse): LlmError {
   return new LlmError('DeepSeek returned an empty final answer', 'EMPTY_RESPONSE')
 }
 
+function streamFinishError(finishReason: string | null | undefined): LlmError | null {
+  if (finishReason === 'length') return new LlmError('DeepSeek output was truncated before the final answer', 'OUTPUT_TRUNCATED')
+  if (finishReason === 'content_filter') return new LlmError('DeepSeek omitted the answer because it was filtered', 'CONTENT_FILTER')
+  if (finishReason === 'insufficient_system_resource') return new LlmError('DeepSeek could not finish because inference resources were temporarily unavailable', 'UPSTREAM_RESOURCE')
+  return null
+}
+
 function isRetryableResponseError(error: LlmError): boolean {
   return ['UPSTREAM_RESOURCE', 'EMPTY_FINAL_ANSWER', 'EMPTY_RESPONSE', 'INVALID_RESPONSE'].includes(error.code ?? '')
 }
@@ -111,8 +133,6 @@ async function requestJson(body: Record<string, unknown>): Promise<ChatResponse>
       },
       body: JSON.stringify({
         model: config.deepseekModel,
-        // A2UI and tool selection need a final machine-readable answer, not a
-        // long chain-of-thought. V4 enables thinking by default, so opt out.
         thinking: { type: 'disabled' },
         max_tokens: 8_192,
         ...body,
@@ -161,8 +181,124 @@ async function requestAssistant(
 }
 
 /**
+ * Stream an OpenAI-compatible SSE response. Content deltas are forwarded
+ * immediately while tool-call deltas are assembled into the normal return shape.
+ */
+async function requestAssistantStream(
+  body: Record<string, unknown>,
+  allowToolCalls: boolean,
+  onContentDelta: (delta: string) => void,
+): Promise<AssistantMessage> {
+  if (!config.deepseekApiKey) {
+    throw new LlmError('Missing DEEPSEEK_API_KEY in the environment', 'NO_API_KEY')
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(`${config.deepseekBaseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.deepseekApiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.deepseekModel,
+        thinking: { type: 'disabled' },
+        max_tokens: 8_192,
+        ...body,
+        stream: true,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      const bodyText = await res.text().catch(() => '')
+      const status = res.status === 401 ? 'INVALID_API_KEY' : 'HTTP_' + res.status
+      throw new LlmError(`DeepSeek request failed (${res.status}): ${bodyText.slice(0, 500)}`, status)
+    }
+    if (!res.body) throw new LlmError('DeepSeek returned no response stream', 'INVALID_RESPONSE')
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    const toolParts = new Map<number, { id: string; name: string; arguments: string }>()
+    let buffer = ''
+    let content = ''
+    let finishReason: string | null | undefined
+
+    const consumeLine = (line: string) => {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('data:')) return
+      const payload = trimmed.slice(5).trim()
+      if (!payload || payload === '[DONE]') return
+      let data: ChatStreamResponse
+      try {
+        data = JSON.parse(payload) as ChatStreamResponse
+      } catch {
+        return
+      }
+      const choice = data.choices?.[0]
+      if (!choice) return
+      if (choice.finish_reason) finishReason = choice.finish_reason
+      const delta = choice.delta
+      if (!delta) return
+
+      if (typeof delta.content === 'string' && delta.content) {
+        content += delta.content
+        onContentDelta(delta.content)
+      }
+
+      for (const toolCall of delta.tool_calls ?? []) {
+        const index = toolCall.index ?? 0
+        const current = toolParts.get(index) ?? { id: '', name: '', arguments: '' }
+        if (toolCall.id) current.id = toolCall.id
+        if (toolCall.function?.name) current.name += toolCall.function.name
+        if (toolCall.function?.arguments) current.arguments += toolCall.function.arguments
+        toolParts.set(index, current)
+      }
+    }
+
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let newline: number
+      while ((newline = buffer.indexOf('\n')) !== -1) {
+        const line = buffer.slice(0, newline)
+        buffer = buffer.slice(newline + 1)
+        consumeLine(line)
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim()) consumeLine(buffer)
+
+    const finishError = streamFinishError(finishReason)
+    if (finishError) throw finishError
+
+    const toolCalls = [...toolParts.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, item]) => item)
+
+    const normalizedContent = content.trim()
+    if (normalizedContent || (allowToolCalls && toolCalls.length > 0)) {
+      return { content: normalizedContent, toolCalls }
+    }
+    throw new LlmError('DeepSeek returned an empty final answer', 'EMPTY_RESPONSE')
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      throw new LlmError('DeepSeek request timed out', 'TIMEOUT')
+    }
+    if (err instanceof LlmError) throw err
+    throw new LlmError('Could not reach DeepSeek API: ' + (err as Error).message, 'NETWORK')
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
  * Plain chat completion (non-streaming). Uses strict JSON mode for deterministic
- * A2UI output. On the path that may involve tool calls use `chatWithTools`.
+ * object-shaped output. On paths that may involve tool calls use chatWithTools.
  */
 export async function chatComplete(messages: LlmMessage[]): Promise<string> {
   const result = await requestAssistant(
@@ -172,19 +308,39 @@ export async function chatComplete(messages: LlmMessage[]): Promise<string> {
   return result.content
 }
 
-/** Plain completion for top-level JSON arrays such as A2UI (JSON object mode forbids arrays). */
+/** Plain non-streaming completion retained for cached/fallback flows. */
 export async function chatText(messages: LlmMessage[]): Promise<string> {
   return (await requestAssistant({ messages, temperature: 0.3 }, false)).content
 }
 
+/** Stream plain assistant content as soon as DeepSeek emits it. */
+export async function chatTextStream(
+  messages: LlmMessage[],
+  onContentDelta: (delta: string) => void,
+): Promise<string> {
+  return (await requestAssistantStream({ messages, temperature: 0.3 }, false, onContentDelta)).content
+}
+
 /**
  * Chat completion that exposes DeepSeek function-calling. The model may pick a
- * tool + arguments, but it never executes anything — the backend does. No
- * `response_format` here because JSON mode is incompatible with tool calls.
+ * tool + arguments, but it never executes anything — the backend does.
  */
 export async function chatWithTools(
   messages: LlmMessage[],
   tools: readonly LlmFunctionDef[],
 ): Promise<ChatWithToolsResult> {
   return requestAssistant({ messages, tools, tool_choice: 'auto', temperature: 0.3 }, true)
+}
+
+/** Streaming variant used by research flows so the final A2UI can arrive message-by-message. */
+export async function chatWithToolsStream(
+  messages: LlmMessage[],
+  tools: readonly LlmFunctionDef[],
+  onContentDelta: (delta: string) => void,
+): Promise<ChatWithToolsResult> {
+  return requestAssistantStream(
+    { messages, tools, tool_choice: 'auto', temperature: 0.3 },
+    true,
+    onContentDelta,
+  )
 }

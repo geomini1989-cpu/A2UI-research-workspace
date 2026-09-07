@@ -1,7 +1,7 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
-import { chatText, chatWithTools, LlmError, type LlmMessage, type LlmToolCall } from '../llm/deepseek.js'
-import { buildA2uiMessages, attachRoot } from '../a2ui/a2uiGenerator.js'
-import { RESEARCH_CATALOG_ID } from '../a2ui/a2uiSchema.js'
+import { chatText, chatTextStream, chatWithTools, chatWithToolsStream, LlmError, type LlmMessage, type LlmToolCall } from '../llm/deepseek.js'
+import { buildA2uiMessages, attachRoot, JsonObjectStreamParser } from '../a2ui/a2uiGenerator.js'
+import { RESEARCH_CATALOG_ID, sanitizeMessage } from '../a2ui/a2uiSchema.js'
 import { createProgressiveResearchSurface, progressiveAgentActivity, progressiveAgentSettled, progressivePhase, progressiveRenderSteps } from '../a2ui/progressiveA2ui.js'
 import { SYSTEM_PROMPT } from './systemPrompt.js'
 import {
@@ -131,11 +131,14 @@ async function resolveResearchContent(
   messages: LlmMessage[],
   emit: Emit,
   onToolProgress: (event: { stage: 'started' | 'completed' | 'failed'; toolName: string; detail?: string }) => void = () => {},
+  onContentDelta?: (delta: string) => void,
 ): Promise<string> {
   let client: ResearchClient | null = null
   try {
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      const result = await chatWithTools(messages, RESEARCH_TOOL_FUNCTIONS)
+      const result = onContentDelta
+        ? await chatWithToolsStream(messages, RESEARCH_TOOL_FUNCTIONS, onContentDelta)
+        : await chatWithTools(messages, RESEARCH_TOOL_FUNCTIONS)
 
       if (result.toolCalls.length > 0) {
         emit({ type: 'status', status: '正在调用研究工具…' })
@@ -225,6 +228,108 @@ async function streamGeneratedMessages(rawText: string, emit: Emit, options: { t
   emit({ type: 'agent_text', text: '已生成研究视图（Demo 数据）' })
 }
 
+
+interface GeneratedMessageStreamOptions {
+  taskId?: string
+  originalRequest?: string
+  surfaceId: string
+  drill?: import('../interaction/researchSession.js').DrillDownContext
+  existingSurface?: boolean
+}
+
+function createGeneratedMessageStream(
+  emit: Emit,
+  options: GeneratedMessageStreamOptions,
+) {
+  const parser = new JsonObjectStreamParser()
+  const componentIds = new Set<string>()
+  let emitted = 0
+  let root: Record<string, unknown> | null = null
+  let hasSource = false
+  let sawCreate = false
+
+  const accept = (raw: unknown) => {
+    const sanitized = sanitizeMessage(raw)
+    if (!sanitized) return
+    if (sanitized.dropped.length > 0) {
+      console.warn('[a2ui-stream] dropped components:', sanitized.dropped)
+    }
+
+    const message = sanitized.message
+    if ('createSurface' in message) {
+      message.createSurface.surfaceId = options.surfaceId
+      message.createSurface.catalogId = RESEARCH_CATALOG_ID
+      sawCreate = true
+      if (options.existingSurface) return
+    }
+    if ('updateComponents' in message) message.updateComponents.surfaceId = options.surfaceId
+    if ('updateDataModel' in message) message.updateDataModel.surfaceId = options.surfaceId
+
+    const contextual = options.taskId ? actionContextForTask([message], options.taskId)[0] : message
+    if ('updateComponents' in contextual) {
+      for (const component of contextual.updateComponents.components as Record<string, unknown>[]) {
+        if (typeof component.id === 'string') componentIds.add(component.id)
+        if (component.id === 'root' && component.component === 'Column') root = component
+        if (component.component === 'Badge' && typeof component.label === 'string' && component.label.includes('MCP')) {
+          hasSource = true
+        }
+      }
+    }
+
+    emit({ type: 'message', message: contextual })
+    emitted++
+  }
+
+  const push = (delta: string) => {
+    for (const raw of parser.push(delta)) accept(raw)
+  }
+
+  const finish = async (fullText: string) => {
+    for (const raw of parser.finish()) accept(raw)
+
+    // If the model ignored the streaming contract, reuse the established atomic
+    // parser/render path instead of leaving an unusable partial surface.
+    if (emitted === 0 || !root || (!options.existingSurface && !sawCreate)) {
+      await streamGeneratedMessages(fullText, emit, options)
+      return
+    }
+
+    if (!hasSource && root) {
+      const unique = (base: string) => {
+        let id = base
+        let index = 1
+        while (componentIds.has(id)) id = `${base}-${++index}`
+        componentIds.add(id)
+        return id
+      }
+      const dividerId = unique('stream-ds-div')
+      const labelId = unique('stream-ds-label')
+      const badgeId = unique('stream-ds-badge')
+      const children = Array.isArray(root.children) ? [...root.children] : []
+      const sourceMessage = {
+        version: 'v0.9',
+        updateComponents: {
+          surfaceId: options.surfaceId,
+          components: [
+            { component: 'Divider', id: dividerId },
+            { component: 'Text', id: labelId, variant: 'caption', text: '数据来源' },
+            { component: 'Badge', id: badgeId, label: 'Demo / MCP Research Tool', variant: 'secondary' },
+            { ...root, children: [...children, { id: dividerId }, { id: labelId }, { id: badgeId }] },
+          ],
+        },
+      }
+      accept(sourceMessage)
+    }
+
+    if (options.taskId && options.originalRequest) {
+      registerResearchSurface(options.taskId, options.surfaceId, options.originalRequest, options.drill)
+    }
+    emit({ type: 'agent_text', text: '已生成研究视图（Demo 数据）' })
+  }
+
+  return { push, finish }
+}
+
 /**
  * One coordinator path shared by a normal request and a semantic UI action.
  * It deliberately delegates based on `analyzeTaskRequirements`, rather than
@@ -238,6 +343,7 @@ async function runCoordinatorResearch(
     taskId: string
     drill: import('../interaction/researchSession.js').DrillDownContext
   },
+  onContentDelta?: (delta: string) => void,
 ): Promise<string> {
   const requirement = analyzeTaskRequirements(userMessage)
   emitOrchestrationActivity(emit, { stage: 'planning', actor: 'Research Coordinator', detail: requirement.requiredSkills.length ? `Required skills: ${requirement.requiredSkills.join(', ')}` : 'No specialist skills required' })
@@ -276,23 +382,26 @@ async function runCoordinatorResearch(
       emitOrchestrationActivity(emit, { stage: 'aggregation_started', actor: 'Research Coordinator', detail: `${aggregation.completedAgents.length}/${plan.delegations.length} specialists completed` })
       emitOrchestrationActivity(emit, { stage: 'a2ui_generation', actor: 'Research Coordinator' })
       if (progressive) for (const message of progressivePhase(progressive.surfaceId, 'synthesizing')) emit({ type: 'message', message })
-      return chatText([
+      const synthesisMessages: LlmMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: `原始研究意图：${userMessage}\n以下为 Main Coordinator 通过 Agent Discovery 与 A2A 收集到的聚合结果。只针对当前下钻意图生成一个新的、聚焦的 A2UI surface：\n${JSON.stringify(aggregation)}` },
-      ])
+      ]
+      return onContentDelta
+        ? chatTextStream(synthesisMessages, onContentDelta)
+        : chatText(synthesisMessages)
     }
     if (progressive) for (const message of progressivePhase(progressive.surfaceId, 'fallback')) emit({ type: 'message', message })
   }
   const messages: LlmMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userMessage }]
   if (!requirement.useCoordinatorMcp && requirement.requiredSkills.length === 0) {
     if (progressive) for (const message of progressivePhase(progressive.surfaceId, 'synthesizing')) emit({ type: 'message', message })
-    return chatText(messages)
+    return onContentDelta ? chatTextStream(messages, onContentDelta) : chatText(messages)
   }
   return resolveResearchContent(messages, emit, (event) => {
     if (!progressive) return
     const detail = event.stage === 'started' ? `正在调用 ${event.toolName}` : `${event.toolName} ${event.stage === 'completed' ? '已返回数据' : '调用失败'}`
     for (const message of progressivePhase(progressive.surfaceId, 'tool', detail)) emit({ type: 'message', message })
-  })
+  }, onContentDelta)
 }
 
 export async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID(), surfaceIdOverride?: string): Promise<void> {
@@ -356,7 +465,9 @@ export async function runAutonomousResearch(userMessage: string, emit: Emit, dim
       ]
       try {
         emitOrchestrationActivity(emit, { stage: 'a2ui_generation', actor: 'Research Coordinator' })
-        await streamGeneratedMessages(await chatText(uiMessages), emit, { taskId, originalRequest: userMessage, surfaceId, existingSurface: true })
+        const uiStream = createGeneratedMessageStream(emit, { taskId, originalRequest: userMessage, surfaceId, existingSurface: true })
+        const finalContent = await chatTextStream(uiMessages, uiStream.push)
+        await uiStream.finish(finalContent)
         emitOrchestrationActivity(emit, { stage: 'complete', actor: 'UI' })
         emit({ type: 'task_state', state: 'COMPLETED', taskId })
         emit({ type: 'done' })
@@ -375,10 +486,14 @@ export async function runAutonomousResearch(userMessage: string, emit: Emit, dim
     { role: 'user', content: userMessage },
   ]
 
-  let finalContent: string
+  emit({ type: 'status', status: '正在生成研究视图…' })
+  emit({ type: 'activity', actor: 'Research Coordinator', activity: !requirement.useCoordinatorMcp && requirement.requiredSkills.length === 0 ? 'Generating A2UI directly' : 'Generating A2UI after MCP research' })
+  for (const message of progressivePhase(surfaceId, 'synthesizing')) emit({ type: 'message', message })
+
+  const uiStream = createGeneratedMessageStream(emit, { taskId, originalRequest: userMessage, surfaceId, existingSurface: true })
   try {
-    finalContent = !requirement.useCoordinatorMcp && requirement.requiredSkills.length === 0
-      ? await chatText(messages)
+    const finalContent = !requirement.useCoordinatorMcp && requirement.requiredSkills.length === 0
+      ? await chatTextStream(messages, uiStream.push)
       : await resolveResearchContent(messages, emit, (progress) => {
           const detail = progress.stage === 'started'
             ? `正在调用 ${progress.toolName}`
@@ -386,17 +501,13 @@ export async function runAutonomousResearch(userMessage: string, emit: Emit, dim
               ? `${progress.toolName} 已返回数据`
               : `${progress.toolName} 调用失败，将继续降级处理`
           for (const message of progressivePhase(surfaceId, 'tool', detail)) emit({ type: 'message', message })
-        })
+        }, uiStream.push)
+    await uiStream.finish(finalContent)
   } catch (err) {
     emit({ type: 'task_state', state: 'FAILED', taskId })
     emit({ type: 'error', error: describeError(err) })
     return
   }
-
-  emit({ type: 'status', status: '正在生成研究视图…' })
-  emit({ type: 'activity', actor: 'Research Coordinator', activity: !requirement.useCoordinatorMcp && requirement.requiredSkills.length === 0 ? 'Generating A2UI directly' : 'Generating A2UI after MCP research' })
-  for (const message of progressivePhase(surfaceId, 'synthesizing')) emit({ type: 'message', message })
-  await streamGeneratedMessages(finalContent, emit, { taskId, originalRequest: userMessage, surfaceId, existingSurface: true })
   emit({ type: 'activity', actor: 'UI', activity: 'Ready' })
   emit({ type: 'task_state', state: 'COMPLETED', taskId })
   emit({ type: 'done' })
@@ -471,13 +582,14 @@ export async function runResearchAgentAction(
       emit({ type: 'status', status: '正在按筛选条件更新分析…' })
       emit({ type: 'task_state', state: 'RUNNING', taskId })
       try {
-        const finalContent = await runCoordinatorResearch(request, emit)
-        await streamGeneratedMessages(finalContent, emit, {
+        const uiStream = createGeneratedMessageStream(emit, {
           taskId,
           originalRequest: request,
           surfaceId: semantic.surfaceId,
           existingSurface: true,
         })
+        const finalContent = await runCoordinatorResearch(request, emit, undefined, uiStream.push)
+        await uiStream.finish(finalContent)
         emit({ type: 'task_state', state: 'COMPLETED', taskId })
         emit({ type: 'done' })
       } catch (err) {
@@ -500,10 +612,31 @@ export async function runResearchAgentAction(
     emit({ type: 'task_state', state: 'RUNNING', taskId: session.taskId })
     emit({ type: 'activity', actor: 'Research Coordinator', activity: '下钻分析', detail: semantic.name })
     try {
-      const hasCachedResult = Boolean(session.cached)
-      const finalContent = session.cached ?? await runCoordinatorResearch(request, emit, { surfaceId: detailSurfaceId, taskId: session.taskId, drill: session.drill })
-      if (!session.cached) cacheDrillDown(session.taskId, session.cacheKey, finalContent)
-      await streamGeneratedMessages(finalContent, emit, { taskId: session.taskId, originalRequest: request, surfaceId: detailSurfaceId, drill: session.drill, existingSurface: !hasCachedResult })
+      if (session.cached) {
+        await streamGeneratedMessages(session.cached, emit, {
+          taskId: session.taskId,
+          originalRequest: request,
+          surfaceId: detailSurfaceId,
+          drill: session.drill,
+          existingSurface: false,
+        })
+      } else {
+        const uiStream = createGeneratedMessageStream(emit, {
+          taskId: session.taskId,
+          originalRequest: request,
+          surfaceId: detailSurfaceId,
+          drill: session.drill,
+          existingSurface: true,
+        })
+        const finalContent = await runCoordinatorResearch(
+          request,
+          emit,
+          { surfaceId: detailSurfaceId, taskId: session.taskId, drill: session.drill },
+          uiStream.push,
+        )
+        cacheDrillDown(session.taskId, session.cacheKey, finalContent)
+        await uiStream.finish(finalContent)
+      }
       emit({ type: 'task_state', state: 'COMPLETED', taskId: session.taskId })
       emit({ type: 'done' })
     } catch (err) {

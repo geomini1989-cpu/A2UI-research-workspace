@@ -8,12 +8,17 @@ vi.mock('../config.js', () => ({
   },
 }))
 
-import { chatText, chatWithTools, LlmError } from './deepseek.js'
+import { chatText, chatTextStream, chatWithTools, chatWithToolsStream, LlmError } from './deepseek.js'
 
 const response = (body: unknown) => new Response(JSON.stringify(body), {
   status: 200,
   headers: { 'Content-Type': 'application/json' },
 })
+
+const streamResponse = (events: unknown[]) => new Response(
+  events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n',
+  { status: 200, headers: { 'Content-Type': 'text/event-stream' } },
+)
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -57,6 +62,38 @@ describe('DeepSeek response handling', () => {
       code: 'OUTPUT_TRUNCATED',
     } satisfies Partial<LlmError>)
     expect(request).toHaveBeenCalledTimes(1)
+  })
+
+  it('streams content deltas and sets stream:true', async () => {
+    const request = vi.fn<typeof fetch>(async () => streamResponse([
+      { choices: [{ delta: { content: '{"version":"v0.9",' }, finish_reason: null }] },
+      { choices: [{ delta: { content: '"createSurface":{"surfaceId":"s","catalogId":"research.v0.9","theme":{}}}' }, finish_reason: null }] },
+      { choices: [{ delta: { content: '}' }, finish_reason: 'stop' }] },
+    ]))
+    vi.stubGlobal('fetch', request)
+    const chunks: string[] = []
+
+    const content = await chatTextStream([{ role: 'user', content: 'Generate A2UI' }], (delta) => chunks.push(delta))
+    expect(content).toContain('createSurface')
+    expect(chunks).toHaveLength(3)
+    const body = JSON.parse(String(request.mock.calls[0]?.[1]?.body)) as Record<string, unknown>
+    expect(body.stream).toBe(true)
+  })
+
+  it('assembles streamed tool-call argument chunks', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => streamResponse([
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: 'call-1', function: { name: 'get_company_profile', arguments: '{"company":' } }] }, finish_reason: null }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: '"NVIDIA"}' } }] }, finish_reason: 'tool_calls' }] },
+    ])))
+
+    await expect(chatWithToolsStream(
+      [{ role: 'user', content: 'Research NVIDIA' }],
+      [{ type: 'function', function: { name: 'get_company_profile', parameters: {} } }],
+      () => {},
+    )).resolves.toMatchObject({
+      content: '',
+      toolCalls: [{ id: 'call-1', name: 'get_company_profile', arguments: '{"company":"NVIDIA"}' }],
+    })
   })
 
   it('accepts an empty assistant content when a valid tool call is present', async () => {

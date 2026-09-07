@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractJsonArray, buildA2uiMessages, attachRoot } from './a2uiGenerator.js'
+import { extractJsonArray, buildA2uiMessages, attachRoot, JsonObjectStreamParser } from './a2uiGenerator.js'
 import { sanitizeMessage, isAllowedComponent, RESEARCH_CATALOG_ID } from './a2uiSchema.js'
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 
@@ -21,8 +21,32 @@ describe('extractJsonArray', () => {
     expect(extractJsonArray('Sure! Here: [{"a":1},{"b":2}] hope it helps')).toHaveLength(2)
   })
 
+  it('parses line-delimited JSON message objects', () => {
+    expect(extractJsonArray('{"a":1}\n{"b":{"nested":2}}\n')).toEqual([
+      { a: 1 },
+      { b: { nested: 2 } },
+    ])
+  })
+
   it('returns [] for garbage', () => {
     expect(extractJsonArray('no json here')).toEqual([])
+  })
+})
+
+describe('JsonObjectStreamParser', () => {
+  it('waits for a complete object before yielding it', () => {
+    const parser = new JsonObjectStreamParser()
+    expect(parser.push('{"version":"v0.9","update')).toEqual([])
+    expect(parser.push('Components":{"surfaceId":"s","components":[]}')).toEqual([])
+    expect(parser.push('}\n')).toEqual([
+      { version: 'v0.9', updateComponents: { surfaceId: 's', components: [] } },
+    ])
+  })
+
+  it('extracts multiple objects across arbitrary chunk boundaries', () => {
+    const parser = new JsonObjectStreamParser()
+    expect(parser.push('[{"a":1}, {"b":"x')).toEqual([{ a: 1 }])
+    expect(parser.push('} y"}]')).toEqual([{ b: 'x} y' }])
   })
 })
 

@@ -17,6 +17,78 @@ export interface BuildOptions {
   surfaceId?: string
 }
 
+
+/**
+ * Incrementally extracts complete top-level JSON objects from arbitrary text
+ * chunks. It ignores array wrappers / prose and only yields an object after its
+ * closing brace arrives, so half-generated JSON never reaches A2UI validation.
+ */
+export class JsonObjectStreamParser {
+  private buffer = ''
+  private cursor = 0
+  private start = -1
+  private depth = 0
+  private inString = false
+  private escaped = false
+
+  push(chunk: string): unknown[] {
+    this.buffer += chunk
+    const values: unknown[] = []
+
+    for (; this.cursor < this.buffer.length; this.cursor++) {
+      const ch = this.buffer[this.cursor]
+
+      if (this.start === -1) {
+        if (ch === '{') {
+          this.start = this.cursor
+          this.depth = 1
+          this.inString = false
+          this.escaped = false
+        }
+        continue
+      }
+
+      if (this.escaped) {
+        this.escaped = false
+        continue
+      }
+      if (this.inString && ch === '\\') {
+        this.escaped = true
+        continue
+      }
+      if (ch === '"') {
+        this.inString = !this.inString
+        continue
+      }
+      if (this.inString) continue
+
+      if (ch === '{') this.depth++
+      else if (ch === '}') {
+        this.depth--
+        if (this.depth === 0) {
+          const objectText = this.buffer.slice(this.start, this.cursor + 1)
+          try {
+            values.push(JSON.parse(objectText))
+          } catch {
+            // The object is complete but invalid JSON; skip it and continue.
+          }
+          this.buffer = this.buffer.slice(this.cursor + 1)
+          this.cursor = -1
+          this.start = -1
+          this.inString = false
+          this.escaped = false
+        }
+      }
+    }
+
+    return values
+  }
+
+  finish(): unknown[] {
+    return this.push('\n')
+  }
+}
+
 /**
  * Extract a JSON array from raw LLM output. Handles code fences, a leading /
  * trailing wrapper (`{"messages": [...]}`), and a bare single message object.
@@ -34,10 +106,14 @@ export function extractJsonArray(text: string): unknown[] {
     }
     return [value]
   } catch {
-    // fall through to substring extraction
+    // fall through to streaming/object extraction
   }
 
-  // The model occasionally wraps the array in prose. Find a balanced `[...]`.
+  const objectParser = new JsonObjectStreamParser()
+  const objects = objectParser.push(cleaned)
+  if (objects.length > 0) return objects
+
+  // Legacy fallback: find a balanced `[...]` in prose.
   const start = cleaned.indexOf('[')
   if (start !== -1) {
     let depth = 0
