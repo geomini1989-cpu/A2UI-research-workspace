@@ -91,16 +91,16 @@ export function semanticActionRequest(action: SemanticAction): string {
     c.timeRange && `时间范围：${c.timeRange}`,
   ].filter(Boolean).join('，')
   const details: Record<SemanticActionName, string> = {
-    explore_metric: `仅深入分析 ${subject} 的 ${c.metric}，重点说明趋势、驱动因素、可持续性与相关风险。`,
-    explore_company: `深入研究 ${c.company}，并与当前研究上下文关联。`,
-    explore_risk: `深入分析 ${subject} 的 ${c.risk}，说明触发条件、影响路径和缓解因素。`,
-    explore_segment: `深入研究 ${subject} 的 ${c.segment} 业务分部，结合财务表现与产品/技术驱动因素。`,
-    explore_event: `深入分析市场事件 ${c.eventId} 对 ${subject} 的影响、时间线与不确定性。`,
-    explore_period: `深入分析 ${subject} 在 ${c.period} 的表现，解释该期间的变化和关键驱动。`,
-    compare_item: `围绕 ${c.comparisonTarget} 对 ${subject} 进行针对性的估值或业务比较。`,
-    show_details: `补充展示 ${subject} 当前视图的关键细节与证据。`,
-    view_source: `说明 ${subject} 当前结论使用的演示数据来源与局限。`,
-    change_time_range: `将 ${subject} 的分析时间范围调整为 ${c.timeRange}，并重新解释趋势。`,
+    explore_metric: `回答一个追问：${subject} 的 ${c.metric} 当前最值得关注什么？给出结论和最关键依据。`,
+    explore_company: `回答一个追问：${c.company} 相对当前研究上下文最值得关注什么？`,
+    explore_risk: `回答一个追问：${subject} 的 ${c.risk} 风险最可能如何影响判断？`,
+    explore_segment: `回答一个追问：${subject} 的 ${c.segment} 业务分部最重要的变化和驱动是什么？`,
+    explore_event: `回答一个追问：事件 ${c.eventId} 对 ${subject} 的核心影响是什么？`,
+    explore_period: `回答一个追问：${subject} 在 ${c.period} 为什么出现当前表现？`,
+    compare_item: `回答一个追问：围绕 ${c.comparisonTarget}，${subject} 的关键比较结论是什么？`,
+    show_details: `回答一个追问：补充 ${subject} 当前视图最关键的细节与证据。`,
+    view_source: `回答一个追问：${subject} 当前结论使用了什么演示数据，主要局限是什么？`,
+    change_time_range: `回答一个追问：把时间范围看作 ${c.timeRange} 后，${subject} 的趋势判断有什么变化？`,
     apply_filters: `按以下筛选条件更新研究视图：${filterSummary || '当前筛选条件'}。重新组织相关指标、图表、表格和结论，只保留与筛选条件有关的内容。`,
   }
   return `${details[action.name]}\n已验证的交互上下文：${JSON.stringify(c)}`

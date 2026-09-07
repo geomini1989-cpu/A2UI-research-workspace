@@ -5,7 +5,7 @@ import { z } from 'zod'
 import { cn } from '@/lib/utils'
 import { DetailDrawer } from './DetailDrawer'
 import { TABLE_PREVIEW_ROWS } from './presentation'
-import { createMockMetricDetail, publishMetricChartDetail } from './metricChartInteraction'
+import { createMockMetricDetail } from './metricChartInteraction'
 
 const weight = z.number().optional()
 const SemanticAction = z.object({
@@ -36,6 +36,12 @@ function changeClass(change: unknown): string {
   return 'genui-muted'
 }
 
+function compactText(value: unknown, max = 72): string {
+  const text = String(value ?? '').trim()
+  if (text.length <= max) return text
+  return `${text.slice(0, max).replace(/[，。；、\s]+$/u, '')}…`
+}
+
 export const MetricCard = createComponentImplementation(
   {
     name: 'MetricCard',
@@ -45,29 +51,38 @@ export const MetricCard = createComponentImplementation(
     }),
   },
   ({ props, context }: any) => {
-    const interactive = Boolean(props.value || props.action)
+    const [expanded, setExpanded] = React.useState(false)
+    const interactive = Boolean(props.value || props.action || props.detail)
+    const fallback = createMockMetricDetail(props.title, props.value)
+    const detailTitle = props.detail?.title ?? `${props.title} · 关键补充`
+    const detailSummary = compactText(props.detail?.summary ?? fallback.summary, 84)
+    const detailPoints: string[] = Array.isArray(props.detail?.keyPoints)
+      ? props.detail.keyPoints.slice(0, 2).map((point: string) => compactText(point, 56))
+      : []
+
     const click = () => {
       if (props.action?.event.context?.interactionMode === 'research') {
         dispatch(context, props.action)
         return
       }
-      const generatedData = props.detail?.data
-      const fallback = createMockMetricDetail(props.title, props.value)
-      publishMetricChartDetail({
-        ...fallback,
-        title: props.detail?.title ?? fallback.title,
-        summary: props.detail?.summary ?? fallback.summary,
-        data: Array.isArray(generatedData) && generatedData.length > 0 ? generatedData : fallback.data,
-        targetChartId: props.detail?.targetChartId,
-      })
+      setExpanded((current) => !current)
     }
+
     return <div className="genui-metric-wrap" style={weightStyle(props.weight)}>
-      <button type="button" className={cn('genui-metric', interactive && 'genui-interactive')} onClick={click} aria-label={`在下方图表查看${props.title}详情`}>
-      <div className="genui-metric__label">{props.title ?? '—'}</div>
-      <div className="genui-metric__value">{props.value ?? '—'}</div>
-      {props.change && <div className={cn('genui-metric__change', changeClass(props.change))}>{props.change}</div>}
-      {props.description && <div className="genui-metric__description">{props.description}</div>}
+      <button type="button" className={cn('genui-metric', interactive && 'genui-interactive')} onClick={click} aria-expanded={expanded} aria-label={`查看${props.title}关键补充`}>
+        <div className="genui-metric__label">{props.title ?? '—'}</div>
+        <div className="genui-metric__value">{props.value ?? '—'}</div>
+        {props.change && <div className={cn('genui-metric__change', changeClass(props.change))}>{props.change}</div>}
+        {props.description && <div className="genui-metric__description">{compactText(props.description, 48)}</div>}
       </button>
+      {expanded && (
+        <section className="genui-inline-detail" aria-live="polite">
+          <strong>{detailTitle}</strong>
+          {detailSummary && <p>{detailSummary}</p>}
+          {detailPoints.length > 0 && <ul>{detailPoints.map((point, index) => <li key={index}>{point}</li>)}</ul>}
+          <button type="button" onClick={() => setExpanded(false)}>收起</button>
+        </section>
+      )}
     </div>
   },
 )
@@ -152,11 +167,14 @@ export const ResearchSummary = createComponentImplementation(
     }),
   },
   ({ props }: any) => {
-    const keyPoints: string[] = Array.isArray(props.keyPoints) ? props.keyPoints : []
+    const keyPoints: string[] = Array.isArray(props.keyPoints)
+      ? props.keyPoints.slice(0, 3).map((point: string) => compactText(point, 60))
+      : []
+    const summary = compactText(props.summary, 90)
     return (
       <section className="genui-summary" style={weightStyle(props.weight)}>
         {props.title && <h3>{props.title}</h3>}
-        {props.summary && <p>{props.summary}</p>}
+        {summary && <p>{summary}</p>}
         {keyPoints.length > 0 && <ul>{keyPoints.map((point, index) => <li key={index}>{point}</li>)}</ul>}
       </section>
     )
@@ -178,7 +196,7 @@ export const RiskBadge = createComponentImplementation(
         <span>{level}</span>
         <div>
           {props.label && <strong>{props.label}</strong>}
-          {props.description && <p>{props.description}</p>}
+          {props.description && <p>{compactText(props.description, 64)}</p>}
         </div>
       </button>
     )
@@ -251,7 +269,9 @@ export const InsightList = createComponentImplementation(
     schema: z.object({ items: z.array(z.string()).default([]), weight }),
   },
   ({ props }: any) => {
-    const items: string[] = Array.isArray(props.items) ? props.items : []
+    const items: string[] = Array.isArray(props.items)
+      ? props.items.slice(0, 3).map((item: string) => compactText(item, 60))
+      : []
     return (
       <section className="genui-insights" style={weightStyle(props.weight)}>
         <h3>关键洞察</h3>

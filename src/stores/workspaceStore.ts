@@ -26,6 +26,23 @@ function createdSurfaceId(event: AgentStreamEvent): string | null {
   return typeof create?.surfaceId === 'string' ? create.surfaceId : null
 }
 
+function semanticQuestion(action: AgentAction): string {
+  const c = action.context
+  const subject = String(c.company ?? c.subject ?? '当前内容')
+  switch (action.name) {
+    case 'explore_metric': return `${subject} 的 ${String(c.metric ?? '这个指标')} 最值得关注什么？`
+    case 'explore_company': return `${String(c.company ?? subject)} 最值得关注什么？`
+    case 'explore_risk': return `${subject} 的 ${String(c.risk ?? '这个风险')} 会如何影响判断？`
+    case 'explore_segment': return `${subject} 的 ${String(c.segment ?? '这个业务')} 关键变化是什么？`
+    case 'explore_event': return `这个事件对 ${subject} 的核心影响是什么？`
+    case 'explore_period': return `${subject} 在 ${String(c.period ?? '这个期间')} 为什么出现当前表现？`
+    case 'compare_item': return `围绕 ${String(c.comparisonTarget ?? '这个比较项')}，关键结论是什么？`
+    case 'view_source': return `这条结论的数据来源和局限是什么？`
+    case 'change_time_range': return `换到 ${String(c.timeRange ?? '这个时间范围')} 后，趋势判断有什么变化？`
+    default: return `补充一下 ${subject} 最关键的细节。`
+  }
+}
+
 function handleStreamEvent(
   get: () => WorkspaceStore,
   set: (partial: Partial<WorkspaceStore>) => void,
@@ -152,18 +169,22 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
       if (get().isGenerating) return
       const semantic = isSemanticAction(action.name)
       const filtering = action.name === 'apply_filters'
-      const drill = semantic && !filtering
+      const qa = semantic && !filtering
       // Add/remove actions mutate the Composer in place. composer_start is a
       // transition to a new research surface, so the first generated surface
       // replaces the Composer instead of sharing its component graph.
       const inlineComposer = action.name.startsWith('composer_') && action.name !== 'composer_start'
-      const target = String(action.context.metric ?? action.context.segment ?? action.context.risk ?? action.context.period ?? action.context.company ?? '详情')
+      const question = qa ? semanticQuestion(action) : null
+      const currentMessages = get().messages
       set({
+        messages: question
+          ? [...currentMessages, { id: nextId('user'), role: 'user', content: question, createdAt: Date.now() }]
+          : currentMessages,
         isGenerating: true,
-        agentStatus: filtering ? '正在更新分析…' : drill ? `正在深入分析 ${target}…` : '正在执行操作…',
+        agentStatus: filtering ? '正在更新分析…' : qa ? '正在回答追问…' : '正在执行操作…',
         error: null,
         activities: [],
-        pendingDrill: drill ? { action, startedAt: Date.now() } : null,
+        pendingDrill: null,
         drillError: null,
       })
       let surfaceCleared = false
@@ -176,39 +197,22 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
             context: action.context,
           },
           (event) => {
-            const drillSurfaceId = drill ? createdSurfaceId(event) : null
-            if (drill && drillSurfaceId) {
-              const parentSurfaceId = action.surfaceId
-              const parent = get().surfaceHistory.find((item) => item.surfaceId === parentSurfaceId)
-              const depth = parent ? parent.depth + 1 : 1
-              set({
-                surfaceHistory: [
-                  // A parent has one active child at a time. Older branches remain
-                  // cached and can be reopened without another agent call.
-                  ...get().surfaceHistory
-                    .filter((item) => item.surfaceId !== drillSurfaceId)
-                    .map((item) => item.parentSurfaceId === parentSurfaceId ? { ...item, collapsed: true } : item),
-                  { surfaceId: drillSurfaceId, parentSurfaceId, depth, action, collapsed: false },
-                ],
-                pendingDrill: null,
-              })
-            }
-            // Preserve the current interaction form when backend validation fails.
-            // Replace it only after the server has actually produced a new surface.
+            // Preserve the current generated research surface for semantic Q&A.
+            // Only non-semantic actions that genuinely navigate to another flow
+            // replace the current surface.
             if (!semantic && !inlineComposer && event.type === 'message' && !surfaceCleared) {
               clearSurfaces()
               set({ rootSurfaceId: null, surfaceHistory: [] })
               surfaceCleared = true
             }
-            if (drill && event.type === 'error') set({ drillError: { action, error: event.error }, pendingDrill: null })
-            handleStreamEvent(get, set, event, drill)
+            handleStreamEvent(get, set, event)
           },
         )
       } catch (err) {
         const message = err instanceof Error ? err.message : '操作失败，请稍后再试'
         set({
-          error: drill ? null : message,
-          drillError: drill ? { action, error: message } : null,
+          error: message,
+          drillError: null,
           pendingDrill: null,
           isGenerating: false,
           agentStatus: '出错',

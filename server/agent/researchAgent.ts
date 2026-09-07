@@ -18,7 +18,7 @@ import { decideInteraction, isExplicitPlanReview } from '../interaction/interact
 import { createPendingInteraction } from '../interaction/interactionStore.js'
 import { approvalSurface, cancelledSurface, missingInformationSurface, planReviewSurface, researchScopeSurface } from '../interaction/interactionUi.js'
 import { handleRegisteredAction } from '../interaction/actionRegistry.js'
-import { beginDrillDown, cacheDrillDown, registerResearchSurface } from '../interaction/researchSession.js'
+import { registerResearchSurface } from '../interaction/researchSession.js'
 import { semanticActionRequest } from '../interaction/semanticActions.js'
 
 /** Events emitted to the NDJSON client stream. */
@@ -43,6 +43,15 @@ export interface AgentActionPayload {
 /** Upper bound on tool-calling rounds so a misbehaving loop can never hang. */
 const MAX_TOOL_ROUNDS = 4
 const RENDER_STEP_DELAY_MS = 32
+
+const QA_SYSTEM_PROMPT = `你是智研工作台的研究问答助手。当前请求来自用户对已生成研究结果的一次追问。
+只返回简洁的中文纯文本答案，不生成 A2UI、JSON、Markdown 标题或新的界面。
+回答规则：
+1. 第一行直接给结论。
+2. 最多再补 2 条关键依据；整段控制在约 180 个汉字以内。
+3. 不重复背景，不写长段落，不展开无关维度。
+4. 数据来自演示研究数据时明确使用“演示数据”措辞，不得声称实时行情或真实数据库。
+5. 如果上下文不足，直接说明缺少哪一项信息。公司名、ticker、常用缩写可保留原文。`
 
 export type ResearchRoute = 'direct-a2ui' | 'direct-mcp' | 'a2a-financial'
 
@@ -403,6 +412,52 @@ async function runCoordinatorResearch(
   }, onContentDelta)
 }
 
+async function runCoordinatorAnswer(userMessage: string, emit: Emit): Promise<string> {
+  const requirement = analyzeTaskRequirements(userMessage)
+  emitOrchestrationActivity(emit, {
+    stage: 'planning',
+    actor: 'Research Coordinator',
+    detail: requirement.requiredSkills.length ? `Required skills: ${requirement.requiredSkills.join(', ')}` : 'Concise follow-up answer',
+  })
+  const plan = createDelegationPlan(requirement)
+
+  for (const match of plan.delegations) {
+    emitOrchestrationActivity(emit, {
+      stage: 'agent_discovered',
+      actor: match.card.name,
+      detail: match.matchedSkills.join(', '),
+    })
+  }
+
+  if (plan.delegations.length > 0) {
+    const results = await executeDelegationPlan(plan, userMessage, (event) => emitOrchestrationActivity(emit, event))
+    const aggregation = aggregateSpecialistResults(results, plan, userMessage)
+    if (aggregation.completedAgents.length > 0) {
+      emitOrchestrationActivity(emit, {
+        stage: 'aggregation_started',
+        actor: 'Research Coordinator',
+        detail: `${aggregation.completedAgents.length}/${plan.delegations.length} specialists completed`,
+      })
+      return chatText([
+        { role: 'system', content: QA_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `用户追问：${userMessage}\n以下是本次追问可用的聚合研究结果，只提炼最关键结论：\n${JSON.stringify(aggregation)}`,
+        },
+      ])
+    }
+  }
+
+  const messages: LlmMessage[] = [
+    { role: 'system', content: QA_SYSTEM_PROMPT },
+    { role: 'user', content: userMessage },
+  ]
+  if (!requirement.useCoordinatorMcp && requirement.requiredSkills.length === 0) {
+    return chatText(messages)
+  }
+  return resolveResearchContent(messages, emit)
+}
+
 export async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID(), surfaceIdOverride?: string): Promise<void> {
   emit({ type: 'task_state', state: 'RUNNING', taskId })
   const requirement = dimensions ? requirementForDimensions(dimensions) : analyzeTaskRequirements(userMessage)
@@ -597,49 +652,19 @@ export async function runResearchAgentAction(
       }
       return
     }
-    let session
-    try {
-      session = beginDrillDown(semantic)
-    } catch (err) {
-      emit({ type: 'error', error: err instanceof Error ? err.message : '无法开始下钻分析' })
-      return
-    }
-    const detailSurfaceId = `drill-${crypto.randomUUID()}`
+    const taskId = semantic.context.taskId ?? crypto.randomUUID()
     const request = semanticActionRequest(semantic)
-    const label = semantic.context.metric ?? semantic.context.segment ?? semantic.context.risk ?? semantic.context.period ?? semantic.context.company ?? '详情'
-    emit({ type: 'status', status: `正在深入分析 ${label}…` })
-    emit({ type: 'task_state', state: 'RUNNING', taskId: session.taskId })
-    emit({ type: 'activity', actor: 'Research Coordinator', activity: '下钻分析', detail: semantic.name })
+    const label = semantic.context.metric ?? semantic.context.segment ?? semantic.context.risk ?? semantic.context.period ?? semantic.context.company ?? '当前内容'
+    emit({ type: 'status', status: `正在回答关于 ${label} 的追问…` })
+    emit({ type: 'task_state', state: 'RUNNING', taskId })
+    emit({ type: 'activity', actor: 'Research Coordinator', activity: '研究追问', detail: semantic.name })
     try {
-      if (session.cached) {
-        await streamGeneratedMessages(session.cached, emit, {
-          taskId: session.taskId,
-          originalRequest: request,
-          surfaceId: detailSurfaceId,
-          drill: session.drill,
-          existingSurface: false,
-        })
-      } else {
-        const uiStream = createGeneratedMessageStream(emit, {
-          taskId: session.taskId,
-          originalRequest: request,
-          surfaceId: detailSurfaceId,
-          drill: session.drill,
-          existingSurface: true,
-        })
-        const finalContent = await runCoordinatorResearch(
-          request,
-          emit,
-          { surfaceId: detailSurfaceId, taskId: session.taskId, drill: session.drill },
-          uiStream.push,
-        )
-        cacheDrillDown(session.taskId, session.cacheKey, finalContent)
-        await uiStream.finish(finalContent)
-      }
-      emit({ type: 'task_state', state: 'COMPLETED', taskId: session.taskId })
+      const answer = await runCoordinatorAnswer(request, emit)
+      emit({ type: 'agent_text', text: answer.trim() })
+      emit({ type: 'task_state', state: 'COMPLETED', taskId })
       emit({ type: 'done' })
     } catch (err) {
-      emit({ type: 'task_state', state: 'FAILED', taskId: session.taskId })
+      emit({ type: 'task_state', state: 'FAILED', taskId })
       emit({ type: 'error', error: describeError(err) })
     }
     return
