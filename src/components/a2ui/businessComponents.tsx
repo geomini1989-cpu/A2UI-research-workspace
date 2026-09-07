@@ -185,6 +185,66 @@ export const RiskBadge = createComponentImplementation(
   },
 )
 
+
+const FILTER_KEYS = ['company', 'metric', 'segment', 'period', 'timeRange'] as const
+const FilterOption = z.object({ value: z.string(), label: z.string() })
+const FilterSpec = z.object({
+  key: z.enum(FILTER_KEYS),
+  label: z.string(),
+  options: z.array(FilterOption).min(1),
+  defaultValue: z.string().optional(),
+})
+
+export const FilterBar = createComponentImplementation(
+  {
+    name: 'FilterBar',
+    schema: z.object({
+      title: z.string().optional(),
+      filters: z.array(FilterSpec).min(1),
+      action: SemanticAction,
+      weight,
+    }),
+  },
+  ({ props, context }: any) => {
+    const filters = Array.isArray(props.filters) ? props.filters : []
+    const [values, setValues] = React.useState<Record<string, string>>(() =>
+      Object.fromEntries(filters.map((filter: any) => [
+        filter.key,
+        filter.defaultValue ?? filter.options?.[0]?.value ?? '',
+      ])),
+    )
+
+    return (
+      <section className="genui-filterbar" style={weightStyle(props.weight)} aria-label={props.title ?? '分析筛选'}>
+        <div className="genui-filterbar__heading">
+          <div>
+            <span>筛选条件</span>
+            <h3>{props.title ?? '调整分析范围'}</h3>
+          </div>
+          <button type="button" className="genui-filterbar__apply" onClick={() => dispatch(context, props.action, values)}>
+            更新分析
+          </button>
+        </div>
+        <div className="genui-filterbar__fields">
+          {filters.map((filter: any) => (
+            <label key={filter.key}>
+              <span>{filter.label}</span>
+              <select
+                value={values[filter.key] ?? ''}
+                onChange={(event) => setValues((current) => ({ ...current, [filter.key]: event.target.value }))}
+              >
+                {filter.options.map((option: any) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      </section>
+    )
+  },
+)
+
 export const InsightList = createComponentImplementation(
   {
     name: 'InsightList',
@@ -205,5 +265,5 @@ export const InsightList = createComponentImplementation(
 )
 
 export const BUSINESS_COMPONENTS: Record<string, ReturnType<typeof createComponentImplementation>> = {
-  MetricCard, ComparisonCard, StockOverview, ResearchSummary, RiskBadge, InsightList,
+  MetricCard, ComparisonCard, StockOverview, ResearchSummary, RiskBadge, FilterBar, InsightList,
 }

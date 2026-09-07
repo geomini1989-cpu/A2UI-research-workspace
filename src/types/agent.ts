@@ -19,7 +19,7 @@ export const DEMO_ACTIONS = [
   'composer_remove_comparison', 'composer_start',
   'explore_metric', 'explore_company', 'explore_risk', 'explore_segment',
   'explore_event', 'explore_period', 'compare_item', 'show_details',
-  'view_source', 'change_time_range',
+  'view_source', 'change_time_range', 'apply_filters',
 ] as const
 
 export type DemoAction = (typeof DEMO_ACTIONS)[number]
@@ -27,7 +27,7 @@ export type DemoAction = (typeof DEMO_ACTIONS)[number]
 export const SEMANTIC_ACTIONS = [
   'explore_metric', 'explore_company', 'explore_risk', 'explore_segment',
   'explore_event', 'explore_period', 'compare_item', 'show_details',
-  'view_source', 'change_time_range',
+  'view_source', 'change_time_range', 'apply_filters',
 ] as const
 export type SemanticActionName = (typeof SEMANTIC_ACTIONS)[number]
 export type SemanticActionContext = Partial<Record<

@@ -5,7 +5,7 @@
 export const SEMANTIC_ACTION_NAMES = [
   'explore_metric', 'explore_company', 'explore_risk', 'explore_segment',
   'explore_event', 'explore_period', 'compare_item', 'show_details',
-  'view_source', 'change_time_range',
+  'view_source', 'change_time_range', 'apply_filters',
 ] as const
 
 export type SemanticActionName = (typeof SEMANTIC_ACTION_NAMES)[number]
@@ -83,6 +83,13 @@ export function validateSemanticAction(input: {
 export function semanticActionRequest(action: SemanticAction): string {
   const c = action.context
   const subject = c.company ?? c.subject ?? '当前研究对象'
+  const filterSummary = [
+    c.company && `公司：${c.company}`,
+    c.segment && `业务板块：${c.segment}`,
+    c.metric && `指标：${c.metric}`,
+    c.period && `期间：${c.period}`,
+    c.timeRange && `时间范围：${c.timeRange}`,
+  ].filter(Boolean).join('，')
   const details: Record<SemanticActionName, string> = {
     explore_metric: `仅深入分析 ${subject} 的 ${c.metric}，重点说明趋势、驱动因素、可持续性与相关风险。`,
     explore_company: `深入研究 ${c.company}，并与当前研究上下文关联。`,
@@ -94,6 +101,7 @@ export function semanticActionRequest(action: SemanticAction): string {
     show_details: `补充展示 ${subject} 当前视图的关键细节与证据。`,
     view_source: `说明 ${subject} 当前结论使用的演示数据来源与局限。`,
     change_time_range: `将 ${subject} 的分析时间范围调整为 ${c.timeRange}，并重新解释趋势。`,
+    apply_filters: `按以下筛选条件更新研究视图：${filterSummary || '当前筛选条件'}。重新组织相关指标、图表、表格和结论，只保留与筛选条件有关的内容。`,
   }
   return `${details[action.name]}\n已验证的交互上下文：${JSON.stringify(c)}`
 }

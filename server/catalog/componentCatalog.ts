@@ -140,12 +140,25 @@ export const COMPONENT_CATALOG: CatalogComponentSpec[] = [
       yKey: 'string?',
       height: 'number?',
       interaction: 'object? {pointAction?,barAction?,seriesAction?}; use context.interactionMode="research" only for deep research',
-      filters: 'object? {timeRanges:[{value,label}], rangeKey?, defaultRange?}; filters existing chart data locally',
+      filters: 'object? {metricKey?,metricLabel?,timeRanges:[{value,label}],rangeKey?,defaultRange?}; only include when the Agent explicitly wants chart-local controls',
       weight: 'number?',
     },
     required: ['data'],
   },
   // --------------------------------------------------------------- Business
+  {
+    name: 'FilterBar',
+    label: 'Analysis Filters',
+    category: 'business',
+    description: 'A cross-component analysis filter group. Use when changing company, segment, metric or period should refresh the broader research view; do not use for chart-only display controls.',
+    props: {
+      title: 'string?',
+      filters: 'array<{key:company|metric|segment|period|timeRange,label,options:array<{value,label}>,defaultValue?}>',
+      action: 'semanticAction (apply_filters)',
+      weight: 'number?',
+    },
+    required: ['filters', 'action'],
+  },
   {
     name: 'MetricCard',
     label: 'Metric Card',

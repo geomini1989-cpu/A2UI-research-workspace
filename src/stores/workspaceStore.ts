@@ -151,14 +151,16 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
     handleAction: async (action) => {
       if (get().isGenerating) return
       const semantic = isSemanticAction(action.name)
+      const filtering = action.name === 'apply_filters'
+      const drill = semantic && !filtering
       const inlineComposer = action.name.startsWith('composer_')
       const target = String(action.context.metric ?? action.context.segment ?? action.context.risk ?? action.context.period ?? action.context.company ?? '详情')
       set({
         isGenerating: true,
-        agentStatus: semantic ? `正在深入分析 ${target}…` : `正在执行操作…`,
+        agentStatus: filtering ? '正在更新分析…' : drill ? `正在深入分析 ${target}…` : '正在执行操作…',
         error: null,
         activities: [],
-        pendingDrill: semantic ? { action, startedAt: Date.now() } : null,
+        pendingDrill: drill ? { action, startedAt: Date.now() } : null,
         drillError: null,
       })
       let surfaceCleared = false
@@ -171,8 +173,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
             context: action.context,
           },
           (event) => {
-            const drillSurfaceId = semantic ? createdSurfaceId(event) : null
-            if (semantic && drillSurfaceId) {
+            const drillSurfaceId = drill ? createdSurfaceId(event) : null
+            if (drill && drillSurfaceId) {
               const parentSurfaceId = action.surfaceId
               const parent = get().surfaceHistory.find((item) => item.surfaceId === parentSurfaceId)
               const depth = parent ? parent.depth + 1 : 1
@@ -195,15 +197,15 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
               set({ rootSurfaceId: null, surfaceHistory: [] })
               surfaceCleared = true
             }
-            if (semantic && event.type === 'error') set({ drillError: { action, error: event.error }, pendingDrill: null })
-            handleStreamEvent(get, set, event, semantic)
+            if (drill && event.type === 'error') set({ drillError: { action, error: event.error }, pendingDrill: null })
+            handleStreamEvent(get, set, event, drill)
           },
         )
       } catch (err) {
         const message = err instanceof Error ? err.message : '操作失败，请稍后再试'
         set({
-          error: semantic ? null : message,
-          drillError: semantic ? { action, error: message } : null,
+          error: drill ? null : message,
+          drillError: drill ? { action, error: message } : null,
           pendingDrill: null,
           isGenerating: false,
           agentStatus: '出错',

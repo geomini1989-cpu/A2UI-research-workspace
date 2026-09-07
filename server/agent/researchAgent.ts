@@ -465,6 +465,27 @@ export async function runResearchAgentAction(
   }
   if (registered.kind === 'semantic') {
     const { action: semantic } = registered
+    if (semantic.name === 'apply_filters') {
+      const taskId = semantic.context.taskId ?? crypto.randomUUID()
+      const request = semanticActionRequest(semantic)
+      emit({ type: 'status', status: '正在按筛选条件更新分析…' })
+      emit({ type: 'task_state', state: 'RUNNING', taskId })
+      try {
+        const finalContent = await runCoordinatorResearch(request, emit)
+        await streamGeneratedMessages(finalContent, emit, {
+          taskId,
+          originalRequest: request,
+          surfaceId: semantic.surfaceId,
+          existingSurface: true,
+        })
+        emit({ type: 'task_state', state: 'COMPLETED', taskId })
+        emit({ type: 'done' })
+      } catch (err) {
+        emit({ type: 'task_state', state: 'FAILED', taskId })
+        emit({ type: 'error', error: describeError(err) })
+      }
+      return
+    }
     let session
     try {
       session = beginDrillDown(semantic)

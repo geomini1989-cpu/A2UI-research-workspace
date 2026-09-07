@@ -250,7 +250,7 @@ const Badge = createComponentImplementation(
   },
   ({ props }: any) => {
     const rawLabel = String(props.label ?? props.text ?? '')
-    const label = /MCP Research Tool/i.test(rawLabel) ? '演示研究数据' : rawLabel
+    const label = /MCP Research Tool/i.test(rawLabel) ? '演示研究数据' : /Demo Data/i.test(rawLabel) ? '演示数据' : rawLabel
     return (
       <ShadcnBadge className="genui-badge" variant={props.variant ?? 'secondary'} style={weightStyle(props.weight)}>
         {label}
@@ -531,8 +531,11 @@ const Chart = createComponentImplementation(
       height: z.number().optional(),
       interaction: z.object({ pointAction: SemanticAction.optional(), barAction: SemanticAction.optional(), seriesAction: SemanticAction.optional() }).optional(),
       filters: z.object({
+        metricKey: z.string().optional(),
+        metricLabel: z.string().optional(),
         timeRanges: z.array(z.object({ value: z.string(), label: z.string() })).default([]),
-        rangeKey: z.string().optional(), defaultRange: z.string().optional(),
+        rangeKey: z.string().optional(),
+        defaultRange: z.string().optional(),
       }).optional(),
       weight,
     }),
@@ -571,14 +574,11 @@ const Chart = createComponentImplementation(
     const common = { data, margin: { top: 8, right: 10, left: -12, bottom: 0 }, accessibilityLayer: true }
     const detail = needsChartDetail(data.length, requestedHeight)
     const summary = metricDetail?.summary ?? `${activeTitle}，共 ${data.length} 个数据点，展示 ${xKey} 与 ${yKey} 的关系。`
-    const metricOptions = financialMetricChart
-      ? baseData.map((item) => String(item[baseXKey] ?? '')).filter(Boolean)
+    const metricKey = props.filters?.metricKey
+    const metricOptions = metricKey
+      ? baseData.map((item) => String(item[metricKey] ?? '')).filter(Boolean)
       : []
-    const timeRanges = props.filters?.timeRanges?.length > 0
-      ? props.filters.timeRanges
-      : financialMetricChart || metricDetail
-        ? [{ value: 'all', label: '全部期间' }, { value: 'last-3', label: '近 3 期' }, { value: 'last-2', label: '近 2 期' }]
-        : []
+    const timeRanges = props.filters?.timeRanges ?? []
 
     const selectMetric = (metric: string) => {
       setSelectedMetric(metric)
@@ -588,7 +588,7 @@ const Chart = createComponentImplementation(
         setMetricDetail(null)
         return
       }
-      const source = baseData.find((item) => String(item[baseXKey] ?? '') === metric)
+      const source = baseData.find((item) => String(item[metricKey ?? baseXKey] ?? '') === metric)
       setMetricDetail(createMockMetricDetail(metric, source?.[props.yKey ?? 'y']))
     }
 
@@ -644,12 +644,12 @@ const Chart = createComponentImplementation(
         <figcaption>{activeTitle}</figcaption>
         {(metricOptions.length > 0 || timeRanges.length > 0) && <div className="genui-chart-filters">
           <SlidersHorizontal aria-hidden="true" />
-          {metricOptions.length > 0 && <label className="genui-chart-filter"><span>指标</span><select value={selectedMetric} onChange={(event) => selectMetric(event.target.value)}><option value="">全部指标</option>{metricOptions.map((metric) => <option key={metric} value={metric}>{metric}</option>)}</select></label>}
+          {metricOptions.length > 0 && <label className="genui-chart-filter"><span>{props.filters?.metricLabel ?? '指标'}</span><select value={selectedMetric} onChange={(event) => selectMetric(event.target.value)}><option value="">全部指标</option>{metricOptions.map((metric) => <option key={metric} value={metric}>{metric}</option>)}</select></label>}
           {timeRanges.length > 0 && <label className="genui-chart-filter"><span>时间</span><select value={selectedRange} onChange={(event) => setSelectedRange(event.target.value)}>{timeRanges.map((range: { value: string; label: string }) => <option key={range.value} value={range.value}>{range.label}</option>)}</select></label>}
           {metricDetail && <button type="button" className="genui-chart-reset" onClick={() => selectMetric('')}>返回核心指标</button>}
         </div>}
         <p className="sr-only">{summary}</p>
-        {metricDetail && <p className="genui-chart-summary">{metricDetail.summary} <span>Mock 数据</span></p>}
+        {metricDetail && <p className="genui-chart-summary">{metricDetail.summary} <span>演示数据</span></p>}
         {data.length === 0 ? <p className="genui-minor-state">暂无图表数据。</p> : renderChart(height)}
         {selectedPoint && <section className="genui-inline-detail" aria-live="polite"><strong>{String(selectedPoint[xKey] ?? '当前数据点')}</strong><p>{activeTitle}：{String(selectedPoint[yKey] ?? '—')}</p><button type="button" onClick={() => setSelectedPoint(null)}>关闭</button></section>}
         {detail && data.length > 0 && (
