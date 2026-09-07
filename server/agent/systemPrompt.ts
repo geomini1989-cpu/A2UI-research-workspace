@@ -44,6 +44,13 @@ FILTERING
 - Do NOT invent a metricKey or time range that the chart data cannot support. A small static chart with no useful local switch may omit filters.
 - Prefer local Chart.filters when the existing chart already contains all data needed for the switch. Prefer FilterBar when a filter changes the broader research scope and may require Coordinator/MCP/A2A work.
 
+OUTPUT COMPLETENESS
+- Never finish a multi-dimensional or comparison research surface with only headings, badges, or a data-source block.
+- A multi-dimensional research result MUST include at least one substantive analysis component (MetricCard, ComparisonCard, Chart, Table, InsightList, RiskBadge, StockOverview) and a ResearchSummary.
+- A company comparison SHOULD include ComparisonCard or Table plus at least one supporting Chart or InsightList when the aggregation contains enough information.
+- If the aggregation contains financial + technology results, visibly represent BOTH dimensions in the final surface instead of mentioning them only in a subtitle.
+- Keep the result focused, but do not omit the actual research content merely to make the streamed output shorter.
+
 A2UI MESSAGE FORMAT (v0.9)
 Emit one complete JSON object at a time:
 - First create the surface:

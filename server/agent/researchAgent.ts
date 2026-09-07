@@ -2,6 +2,7 @@ import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { chatText, chatTextStream, chatWithTools, chatWithToolsStream, LlmError, type LlmMessage, type LlmToolCall } from '../llm/deepseek.js'
 import { buildA2uiMessages, attachRoot, JsonObjectStreamParser } from '../a2ui/a2uiGenerator.js'
 import { RESEARCH_CATALOG_ID, sanitizeMessage } from '../a2ui/a2uiSchema.js'
+import { StreamingA2uiState } from '../a2ui/streamingA2ui.js'
 import { createProgressiveResearchSurface, progressiveAgentActivity, progressiveAgentSettled, progressivePhase, progressiveRenderSteps } from '../a2ui/progressiveA2ui.js'
 import { SYSTEM_PROMPT } from './systemPrompt.js'
 import {
@@ -242,11 +243,8 @@ function createGeneratedMessageStream(
   options: GeneratedMessageStreamOptions,
 ) {
   const parser = new JsonObjectStreamParser()
-  const componentIds = new Set<string>()
+  const streamState = new StreamingA2uiState()
   let emitted = 0
-  let root: Record<string, unknown> | null = null
-  let hasSource = false
-  let sawCreate = false
 
   const accept = (raw: unknown) => {
     const sanitized = sanitizeMessage(raw)
@@ -255,27 +253,21 @@ function createGeneratedMessageStream(
       console.warn('[a2ui-stream] dropped components:', sanitized.dropped)
     }
 
-    const message = sanitized.message
+    let message = sanitized.message
     if ('createSurface' in message) {
       message.createSurface.surfaceId = options.surfaceId
       message.createSurface.catalogId = RESEARCH_CATALOG_ID
-      sawCreate = true
+      streamState.noteCreate()
       if (options.existingSurface) return
     }
     if ('updateComponents' in message) message.updateComponents.surfaceId = options.surfaceId
     if ('updateDataModel' in message) message.updateDataModel.surfaceId = options.surfaceId
 
-    const contextual = options.taskId ? actionContextForTask([message], options.taskId)[0] : message
-    if ('updateComponents' in contextual) {
-      for (const component of contextual.updateComponents.components as Record<string, unknown>[]) {
-        if (typeof component.id === 'string') componentIds.add(component.id)
-        if (component.id === 'root' && component.component === 'Column') root = component
-        if (component.component === 'Badge' && typeof component.label === 'string' && component.label.includes('MCP')) {
-          hasSource = true
-        }
-      }
-    }
+    // Server owns streamed root accumulation. The model may emit partial root
+    // children, but it cannot make an already-visible block disappear.
+    message = streamState.prepareMessage(message)
 
+    const contextual = options.taskId ? actionContextForTask([message], options.taskId)[0] : message
     emit({ type: 'message', message: contextual })
     emitted++
   }
@@ -289,36 +281,41 @@ function createGeneratedMessageStream(
 
     // If the model ignored the streaming contract, reuse the established atomic
     // parser/render path instead of leaving an unusable partial surface.
-    if (emitted === 0 || !root || (!options.existingSurface && !sawCreate)) {
+    if (emitted === 0 || !streamState.hasRoot || (!options.existingSurface && !streamState.sawCreate)) {
       await streamGeneratedMessages(fullText, emit, options)
       return
     }
 
-    if (!hasSource && root) {
-      const unique = (base: string) => {
-        let id = base
-        let index = 1
-        while (componentIds.has(id)) id = `${base}-${++index}`
-        componentIds.add(id)
-        return id
-      }
-      const dividerId = unique('stream-ds-div')
-      const labelId = unique('stream-ds-label')
-      const badgeId = unique('stream-ds-badge')
-      const children = Array.isArray(root.children) ? [...root.children] : []
-      const sourceMessage = {
+    // Normalize the final root once more: keep nested children nested and attach
+    // any top-level components the model emitted without repeating in root.
+    const finalRoot = streamState.finalRootComponent()
+    if (finalRoot) {
+      accept({
         version: 'v0.9',
         updateComponents: {
           surfaceId: options.surfaceId,
-          components: [
-            { component: 'Divider', id: dividerId },
-            { component: 'Text', id: labelId, variant: 'caption', text: '数据来源' },
-            { component: 'Badge', id: badgeId, label: 'Demo / MCP Research Tool', variant: 'secondary' },
-            { ...root, children: [...children, { id: dividerId }, { id: labelId }, { id: badgeId }] },
-          ],
+          components: [finalRoot],
         },
+      })
+    }
+
+    if (!streamState.hasSource) {
+      const sourceComponents = streamState.createDataSourceComponents()
+      if (sourceComponents.length > 0) {
+        accept({
+          version: 'v0.9',
+          updateComponents: {
+            surfaceId: options.surfaceId,
+            components: sourceComponents,
+          },
+        })
       }
-      accept(sourceMessage)
+    }
+
+    // A schema-valid stream that contains only headings/badges is not a valid
+    // research result. Fail visibly instead of marking an empty surface done.
+    if (!streamState.hasSubstantiveContent) {
+      throw new LlmError('Generated A2UI contained no substantive research components', 'INCOMPLETE_A2UI')
     }
 
     if (options.taskId && options.originalRequest) {

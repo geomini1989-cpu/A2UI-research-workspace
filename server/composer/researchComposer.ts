@@ -268,7 +268,7 @@ function researchRequest(state: ComposerState): string {
 }
 
 export function isResearchComposerRequest(message: string): boolean {
-  return /研究组合器|研究方案|研究菜单|research\s+composer|research\s+plan/i.test(message)
+  return /研究组合器|研究方案|研究菜单|自定义研究|选择研究方向|选择研究内容|自己选研究|research\s+composer|research\s+plan/i.test(message)
 }
 
 export function isResearchComposerAction(name: string): boolean {
@@ -311,7 +311,7 @@ export async function runResearchComposerAction(action: AgentActionPayload, emit
 
   if (action.name === 'composer_start') {
     if (state.selected.length === 0) {
-      emit({ type: 'error', error: '请至少加入一个研究模块' })
+      emit({ type: 'error', error: '请至少选择一个研究方向' })
       return
     }
     await runAutonomousResearch(
