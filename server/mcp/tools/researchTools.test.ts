@@ -4,6 +4,7 @@ import {
   ResearchToolError,
   RESEARCH_TOOL_NAMES,
   RESEARCH_SOURCE_LABEL,
+  type CompanyProfile,
 } from './researchTools.js'
 
 describe('RESEARCH_TOOL_NAMES (allow-list)', () => {
@@ -29,12 +30,30 @@ describe('executeResearchTool', () => {
     expect(res.text).toContain(RESEARCH_SOURCE_LABEL)
   })
 
-  it('returns a financial summary for AMD', () => {
+  it('returns a rich financial summary with 8-quarter history for AMD', () => {
     const res = executeResearchTool('get_financial_summary', { company: 'AMD' })
-    const fin = (res.data as { financial: { revenue: { label: string; value: string }[]; currency: string } }).financial
+    const fin = (res.data as { financial: { revenue: { label: string; value: string }[]; currency: string; history: unknown[]; cashFlow: unknown[] } }).financial
     expect(fin.currency).toBe('USD')
     expect(fin.revenue.length).toBeGreaterThan(0)
-    expect(res.text).toContain('AMD')
+    expect(fin.history).toHaveLength(8)
+    expect(fin.cashFlow.length).toBeGreaterThan(0)
+    expect(res.text).toContain('Quarterly history')
+  })
+
+  it('returns market, technology and risk dimensions from the company profile', () => {
+    const res = executeResearchTool('get_company_profile', { company: 'NVIDIA' })
+    const profile = (res.data as { profile: CompanyProfile }).profile
+    expect(profile.market.competitors.length).toBeGreaterThan(0)
+    expect(profile.market.recentEvents.length).toBeGreaterThan(0)
+    expect(profile.technology.products.length).toBeGreaterThan(0)
+    expect(profile.technology.roadmap.length).toBeGreaterThan(0)
+    expect(profile.risks.length).toBeGreaterThan(0)
+  })
+
+  it('adds Intel as a supported deep mock company', () => {
+    const res = executeResearchTool('get_company_profile', { company: 'INTC' })
+    const profile = (res.data as { profile: { name: string; ticker: string } }).profile
+    expect(profile).toMatchObject({ name: 'Intel', ticker: 'INTC' })
   })
 
   it('rejects an unknown tool (not on the allow-list)', () => {

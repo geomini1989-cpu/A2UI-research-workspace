@@ -1,6 +1,7 @@
 const COMPANY_ALIASES: Record<string, string> = {
   nvidia: 'NVIDIA', nvda: 'NVIDIA', amd: 'AMD', apple: 'Apple', aapl: 'Apple',
-  microsoft: 'Microsoft', msft: 'Microsoft', tesla: 'Tesla', tsla: 'Tesla',
+  microsoft: 'Microsoft', msft: 'Microsoft', intel: 'Intel', intc: 'Intel',
+  tesla: 'Tesla', tsla: 'Tesla',
 }
 
 export function companiesInRequest(text: string): string[] {

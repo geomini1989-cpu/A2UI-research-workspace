@@ -36,7 +36,8 @@ export interface FinancialActivity {
 
 const COMPANY_ALIASES: Record<string, string> = {
   nvidia: 'NVIDIA', nvda: 'NVIDIA', amd: 'AMD', apple: 'Apple', aapl: 'Apple',
-  microsoft: 'Microsoft', msft: 'Microsoft', tesla: 'Tesla', tsla: 'Tesla',
+  microsoft: 'Microsoft', msft: 'Microsoft', intel: 'Intel', intc: 'Intel',
+  tesla: 'Tesla', tsla: 'Tesla',
 }
 
 function companiesIn(text: string): string[] {
@@ -73,10 +74,20 @@ function deterministicResult(request: string, companies: string[], toolData: Rec
     const company = typeof item.company === 'string' ? item.company : 'Company'
     const financial = item.financial as Record<string, unknown> | undefined
     if (!financial) continue
-    for (const category of ['growth', 'profitability', 'valuation'] as const) {
+    for (const category of ['revenue', 'growth', 'profitability', 'valuation', 'cashFlow', 'capitalAllocation'] as const) {
       const rows = financial[category]
       if (Array.isArray(rows)) for (const row of rows as { label?: string; value?: string }[]) {
         if (row.label && row.value) metrics.push({ company, category, label: row.label, value: row.value })
+      }
+    }
+    const history = financial.history
+    if (Array.isArray(history)) {
+      for (const point of history as { period?: string; revenueB?: number; grossMarginPct?: number; operatingMarginPct?: number; eps?: number }[]) {
+        if (!point.period) continue
+        if (typeof point.revenueB === 'number') metrics.push({ company, category: 'trend-revenue', label: `${point.period} Revenue`, value: `${point.revenueB}B` })
+        if (typeof point.grossMarginPct === 'number') metrics.push({ company, category: 'trend-gross-margin', label: `${point.period} Gross Margin`, value: `${point.grossMarginPct}%` })
+        if (typeof point.operatingMarginPct === 'number') metrics.push({ company, category: 'trend-operating-margin', label: `${point.period} Operating Margin`, value: `${point.operatingMarginPct}%` })
+        if (typeof point.eps === 'number') metrics.push({ company, category: 'trend-eps', label: `${point.period} EPS`, value: String(point.eps) })
       }
     }
   }
@@ -127,7 +138,17 @@ export async function runFinancialAgent(
   try {
     const parsed = extractJsonObject(await chatComplete(messages))
     if (!isFinancialResearchResult(parsed)) throw new Error('Structured result schema validation failed')
-    return { ...parsed, analysisType: analysisType(request, companies.length), companies, dataSource: RESEARCH_SOURCE_LABEL, activities }
+    const metricKey = (metric: FinancialMetric) => `${metric.company}|${metric.category}|${metric.label}`
+    const combinedMetrics = new Map<string, FinancialMetric>()
+    for (const metric of [...fallback.metrics, ...parsed.metrics]) combinedMetrics.set(metricKey(metric), metric)
+    return {
+      ...parsed,
+      analysisType: analysisType(request, companies.length),
+      companies,
+      metrics: [...combinedMetrics.values()],
+      dataSource: RESEARCH_SOURCE_LABEL,
+      activities,
+    }
   } catch (err) {
     if (!(err instanceof LlmError) || err.code !== 'NO_API_KEY') {
       console.warn('[financial-agent] structured synthesis fallback:', err)
