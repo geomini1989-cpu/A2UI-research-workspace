@@ -1,5 +1,6 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { stableTopLevelOrder } from './layoutPolicy.js'
+import { normalizeMetricInteractionGroups } from './interactionConsistency.js'
 
 type Component = Record<string, unknown>
 
@@ -97,8 +98,9 @@ export class StreamingA2uiState {
   prepareMessage(message: A2uiMessage): A2uiMessage {
     if (!('updateComponents' in message)) return message
 
-    const components = (message.updateComponents.components as Component[])
-      .map((component) => compactGeneratedBodyText({ ...component }))
+    const components = normalizeMetricInteractionGroups(
+      message.updateComponents.components as Component[],
+    ).map((component) => compactGeneratedBodyText({ ...component }))
 
     // First pass: collect every id in this complete A2UI message. This lets a
     // root safely reference a sibling component even when root appears first.

@@ -1,6 +1,7 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { RESEARCH_CATALOG_ID, sanitizeMessage, stripCodeFences } from './a2uiSchema.js'
 import { stableTopLevelOrder } from './layoutPolicy.js'
+import { normalizeMetricInteractionGroups } from './interactionConsistency.js'
 
 export interface GeneratedMessages {
   /** Validated, allow-listed, normalized A2UI messages. */
@@ -350,6 +351,11 @@ export function buildA2uiMessages(raw: unknown, options?: BuildOptions): Generat
       continue
     }
     const msg = sanitized.message
+    if ('updateComponents' in msg) {
+      msg.updateComponents.components = normalizeMetricInteractionGroups(
+        msg.updateComponents.components as Record<string, unknown>[],
+      ) as typeof msg.updateComponents.components
+    }
     droppedComponents.push(...sanitized.dropped)
 
     if ('createSurface' in msg) {

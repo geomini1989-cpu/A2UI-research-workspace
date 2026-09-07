@@ -47,7 +47,8 @@ export const MetricCard = createComponentImplementation(
     name: 'MetricCard',
     schema: z.object({
       title: z.string(), value: z.string(), change: z.string().optional(),
-      description: z.string().optional(), detail: InlineDetail.optional(), action: SemanticAction.optional(), weight,
+      description: z.string().optional(), interactionGroup: z.string().optional(),
+      detail: InlineDetail.optional(), action: SemanticAction.optional(), weight,
     }),
   },
   ({ props, context }: any) => {

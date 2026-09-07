@@ -81,6 +81,21 @@ describe('StreamingA2uiState', () => {
     expect(components.some((component) => component.id === 'metric')).toBe(true)
   })
 
+  it('keeps peer metric cards on the same interaction mode', () => {
+    const state = new StreamingA2uiState()
+    const message = state.prepareMessage(update([
+      { component: 'MetricCard', id: 'nvda', interactionGroup: 'data-center-revenue', title: 'NVIDIA 数据中心营收', value: '91.5', detail: { summary: '补充解释' } },
+      { component: 'MetricCard', id: 'amd', interactionGroup: 'data-center-revenue', title: 'AMD 数据中心营收', value: '12.6' },
+      { component: 'Row', id: 'metrics', children: [{ id: 'nvda' }, { id: 'amd' }] },
+      { component: 'Column', id: 'root', children: [{ id: 'metrics' }] },
+    ]))
+    const components = 'updateComponents' in message
+      ? message.updateComponents.components as Record<string, unknown>[]
+      : []
+    expect(components.find((component) => component.id === 'nvda')?.detail).toBeUndefined()
+    expect(components.find((component) => component.id === 'amd')?.detail).toBeUndefined()
+  })
+
   it('stabilizes root order across mixed generation order', () => {
     const state = new StreamingA2uiState()
     const message = state.prepareMessage(update([

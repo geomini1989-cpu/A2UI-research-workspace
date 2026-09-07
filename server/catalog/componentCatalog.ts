@@ -166,7 +166,7 @@ export const COMPONENT_CATALOG: CatalogComponentSpec[] = [
     label: 'Metric Card',
     category: 'business',
     description: 'A compact highlighted metric. Static by default; use detail only for a useful same-metric addition, or action only for a real research follow-up.',
-    props: { title: 'string', value: 'string', change: 'string?', description: 'short string?', detail: 'object? {title?,summary?,keyPoints?}; inline addition from current payload', action: 'semanticAction? (high-value conversational follow-up)', weight: 'number?' },
+    props: { title: 'string', value: 'string', change: 'string?', description: 'short string?', interactionGroup: 'string? (same semantic metric across peer cards)', detail: 'object? {title?,summary?,keyPoints?}; inline addition from current payload', action: 'semanticAction? (high-value conversational follow-up)', weight: 'number?' },
     required: ['title', 'value'],
   },
   {
