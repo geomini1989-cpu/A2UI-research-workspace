@@ -10,15 +10,15 @@ import {
 import { ALLOWED_COMPONENTS as SERVER_ALLOWED, isAllowedComponent } from '../a2ui/a2uiSchema.js'
 
 describe('COMPONENT_CATALOG (single source of truth)', () => {
-  it('contains 13 basic + 6 business components (19 total)', () => {
+  it('contains 13 basic + 7 business components (20 total)', () => {
     expect(BASIC_COMPONENT_NAMES).toHaveLength(13)
-    expect(BUSINESS_COMPONENT_NAMES).toHaveLength(6)
-    expect(COMPONENT_CATALOG).toHaveLength(19)
+    expect(BUSINESS_COMPONENT_NAMES).toHaveLength(7)
+    expect(COMPONENT_CATALOG).toHaveLength(20)
   })
 
-  it('exposes exactly the six expected business components', () => {
+  it('exposes the expected business components', () => {
     expect(BUSINESS_COMPONENT_NAMES).toEqual(
-      expect.arrayContaining(['MetricCard', 'ComparisonCard', 'StockOverview', 'ResearchSummary', 'RiskBadge', 'InsightList']),
+      expect.arrayContaining(['FilterBar', 'MetricCard', 'ComparisonCard', 'StockOverview', 'ResearchSummary', 'RiskBadge', 'InsightList']),
     )
   })
 
@@ -56,7 +56,7 @@ describe('COMPONENT_CATALOG (single source of truth)', () => {
 describe('allow-list is derived from the catalog', () => {
   it('keeps the server sanitizer allow-list in sync with the catalog', () => {
     expect(SERVER_ALLOWED).toEqual(ALLOWED_COMPONENTS)
-    expect(SERVER_ALLOWED).toHaveLength(19)
+    expect(SERVER_ALLOWED).toHaveLength(20)
   })
 })
 

@@ -38,6 +38,10 @@ FILTERING
 - Do NOT emit FilterBar for a single fact, a small risk-only answer, or a control that only changes how one Chart is displayed.
 - FilterBar must use action.event.name "apply_filters". Put stable context such as company/currentView in the action; the renderer appends the user's selected filter values before sending the action back.
 - Chart.filters are local presentation controls. A Chart shows metric/time controls ONLY when you explicitly provide Chart.filters. The renderer must not infer filters from titles or metric names.
+- IMPORTANT: when a Chart contains multiple meaningful values that a user would naturally switch between, include Chart.filters instead of omitting the control.
+- For a metric/category chart (for example 营收、毛利率、P/E in one chart), normally set filters.metricKey to the field containing the metric name, usually the same field as xKey, and set filters.metricLabel to "指标".
+- For an ordered time-series chart with 3 or more periods, normally include filters.timeRanges with at least 全部期间, 近 3 期 and 近 2 期; use values "all", "last-3", "last-2" and defaultRange "all".
+- Do NOT invent a metricKey or time range that the chart data cannot support. A small static chart with no useful local switch may omit filters.
 - Prefer local Chart.filters when the existing chart already contains all data needed for the switch. Prefer FilterBar when a filter changes the broader research scope and may require Coordinator/MCP/A2A work.
 
 A2UI MESSAGE FORMAT (v0.9)
@@ -71,7 +75,7 @@ STREAMING EXAMPLE (each line is a complete message; no surrounding array):
 {"version":"v0.9","createSurface":{"surfaceId":"research","catalogId":"research.v0.9","theme":{}}}
 {"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Text","id":"title","variant":"h2","text":"NVIDIA 研究"},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"}]}]}}
 {"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Row","id":"metrics","gap":16,"children":[{"id":"mc1"},{"id":"mc2"}]},{"component":"MetricCard","id":"mc1","title":"营收","value":"演示值"},{"component":"MetricCard","id":"mc2","title":"P/E","value":"演示值"},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"}]}]}}
-{"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Chart","id":"chart","title":"营收趋势","type":"line","xKey":"period","yKey":"value","data":[{"period":"2025","value":1},{"period":"2026","value":2}]},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"},{"id":"chart"}]}]}}
+{"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Chart","id":"chart","title":"营收趋势","type":"line","xKey":"period","yKey":"value","data":[{"period":"2025 Q1","value":1},{"period":"2025 Q2","value":1.2},{"period":"2025 Q3","value":1.5},{"period":"2025 Q4","value":1.8}],"filters":{"timeRanges":[{"value":"all","label":"全部期间"},{"value":"last-3","label":"近 3 期"},{"value":"last-2","label":"近 2 期"}],"defaultRange":"all"}},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"},{"id":"chart"}]}]}}
 {"version":"v0.9","updateComponents":{"surfaceId":"research","components":[{"component":"Divider","id":"ds-div"},{"component":"Text","id":"ds-label","variant":"caption","text":"数据来源"},{"component":"Badge","id":"ds-badge","label":"Demo / MCP Research Tool","variant":"secondary"},{"component":"Column","id":"root","gap":16,"children":[{"id":"title"},{"id":"metrics"},{"id":"chart"},{"id":"ds-div"},{"id":"ds-label"},{"id":"ds-badge"}]}]}}
 
 Now respond to the user's request: pick the catalog components for the task, then stream complete A2UI JSON message objects in that format, one object per line.`
