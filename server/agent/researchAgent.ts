@@ -1,7 +1,7 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { chatText, chatTextStream, chatWithTools, chatWithToolsStream, LlmError, type LlmMessage, type LlmToolCall } from '../llm/deepseek.js'
 import { buildA2uiMessages, attachRoot, JsonObjectStreamParser } from '../a2ui/a2uiGenerator.js'
-import { RESEARCH_CATALOG_ID, sanitizeAgentMessage } from '../a2ui/a2uiSchema.js'
+import { RESEARCH_CATALOG_ID, sanitizeAgentMessage, sanitizeMessage } from '../a2ui/a2uiSchema.js'
 import { StreamingA2uiState } from '../a2ui/streamingA2ui.js'
 import { createProgressiveResearchSurface, progressiveAgentActivity, progressiveAgentSettled, progressivePhase, progressiveRenderSteps } from '../a2ui/progressiveA2ui.js'
 import { SYSTEM_PROMPT } from './systemPrompt.js'
@@ -287,6 +287,13 @@ function createGeneratedMessageStream(
     for (const raw of parser.push(delta)) accept(raw)
   }
 
+  const emitTrustedServerMessage = (raw: unknown) => {
+    const sanitized = sanitizeMessage(raw)
+    if (!sanitized) return
+    const contextual = options.taskId ? actionContextForTask([sanitized.message], options.taskId)[0] : sanitized.message
+    emit({ type: 'message', message: contextual })
+  }
+
   const finish = async (fullText: string) => {
     for (const raw of parser.finish()) accept(raw)
 
@@ -301,7 +308,7 @@ function createGeneratedMessageStream(
     // any top-level components the model emitted without repeating in root.
     const finalRoot = streamState.finalRootComponent()
     if (finalRoot) {
-      accept({
+      emitTrustedServerMessage({
         version: 'v0.9',
         updateComponents: {
           surfaceId: options.surfaceId,
@@ -313,7 +320,7 @@ function createGeneratedMessageStream(
     if (!streamState.hasSource) {
       const sourceComponents = streamState.createDataSourceComponents()
       if (sourceComponents.length > 0) {
-        accept({
+        emitTrustedServerMessage({
           version: 'v0.9',
           updateComponents: {
             surfaceId: options.surfaceId,
