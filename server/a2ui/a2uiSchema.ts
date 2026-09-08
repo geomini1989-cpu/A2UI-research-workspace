@@ -92,6 +92,8 @@ export function sanitizeAgentMessage(raw: unknown): SanitizedMessage | null {
 
   if ('createSurface' in msg) {
     msg.createSurface.catalogId = RESEARCH_CATALOG_ID
+    // Theme is renderer-owned; the model cannot alter visual tokens per request.
+    msg.createSurface.theme = {}
   }
 
   if ('updateComponents' in msg) {
