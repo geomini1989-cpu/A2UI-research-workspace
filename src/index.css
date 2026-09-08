@@ -562,6 +562,11 @@
   border-top: 1px solid var(--genui-border);
 }
 .genui-metric-wrap { min-width: 0; }
+.genui-row > .genui-metric-wrap {
+  flex: 1 1 12rem;
+  min-width: min(100%, 12rem);
+}
+
 .genui-inline-detail { margin-top: 0.65rem; padding: 0.75rem; border: 1px solid var(--genui-border); border-radius: var(--genui-radius-sm); background: var(--genui-surface-muted); color: var(--genui-text); font-size: 0.8rem; line-height: 1.5; }
 .genui-inline-detail p { margin-top: 0.3rem; color: var(--genui-text-muted); }
 .genui-inline-detail ul { margin: 0.4rem 0 0; padding-left: 1rem; color: var(--genui-text-muted); }
