@@ -1,5 +1,5 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
-import { stableTopLevelOrder } from './layoutPolicy.js'
+import { buildStableLayoutPlan, stableTopLevelOrder } from './layoutPolicy.js'
 import { normalizeMetricInteractionGroups } from './interactionConsistency.js'
 
 type Component = Record<string, unknown>
@@ -118,34 +118,39 @@ export class StreamingA2uiState {
       for (const id of childIds(component.children)) this.nestedReferences.add(id)
     }
 
-    // Second pass: root is append-only during this generation. De-duplicate by
-    // component id, not component type.
-    for (const component of components) {
-      if (component.id !== 'root' || component.component !== 'Column') continue
-      for (const id of childIds(component.children)) {
-        if (id === 'root' || !this.componentIds.has(id) || this.rootChildSet.has(id)) continue
-        this.rootChildSet.add(id)
-        this.rootChildIds.push(id)
-      }
-      const normalized = stableTopLevelOrder(
-        this.rootChildIds.filter((id) => !this.nestedReferences.has(id)),
-        this.componentsById,
-      )
-      this.rootChildIds.length = 0
-      this.rootChildSet.clear()
-      for (const id of normalized) {
-        this.rootChildIds.push(id)
-        this.rootChildSet.add(id)
-      }
-      component.children = normalized.map((id) => ({ id }))
-      this.root = { ...component }
+    // Server-owned composition: the Agent never needs to emit root/Row/Column.
+    // Any legacy root from the model is ignored; business cards accumulated so
+    // far are deterministically placed by the layout policy.
+    const agentComponents = components.filter((component) => component.id !== 'root')
+    for (const id of this.componentIds) {
+      if (id === 'root' || this.nestedReferences.has(id) || this.rootChildSet.has(id)) continue
+      this.rootChildSet.add(id)
+      this.rootChildIds.push(id)
     }
+
+    const topLevelIds = this.rootChildIds.filter((id) =>
+      this.componentIds.has(id) && !this.nestedReferences.has(id) && id !== '__layout-metrics')
+    const plan = buildStableLayoutPlan(topLevelIds, this.componentsById)
+    for (const generated of plan.generated) {
+      if (typeof generated.id === 'string') {
+        this.componentIds.add(generated.id)
+        this.componentsById.set(generated.id, generated)
+      }
+    }
+    this.root = {
+      component: 'Column',
+      id: 'root',
+      gap: 16,
+      children: plan.rootChildren.map((id) => ({ id })),
+    }
+    this.componentIds.add('root')
+    this.componentsById.set('root', this.root)
 
     return {
       ...message,
       updateComponents: {
         ...message.updateComponents,
-        components,
+        components: [...agentComponents, ...plan.generated, this.root],
       },
     } as A2uiMessage
   }
@@ -163,21 +168,25 @@ export class StreamingA2uiState {
       this.rootChildIds.push(id)
     }
 
-    const normalized = stableTopLevelOrder(
-      this.rootChildIds.filter((id) =>
-        this.componentIds.has(id) && !this.nestedReferences.has(id)),
-      this.componentsById,
-    )
+    const candidates = this.rootChildIds.filter((id) =>
+      this.componentIds.has(id) && !this.nestedReferences.has(id) && id !== '__layout-metrics')
+    const plan = buildStableLayoutPlan(candidates, this.componentsById)
+    for (const generated of plan.generated) {
+      if (typeof generated.id === 'string') {
+        this.componentIds.add(generated.id)
+        this.componentsById.set(generated.id, generated)
+      }
+    }
 
     this.rootChildIds.length = 0
     this.rootChildSet.clear()
-    for (const id of normalized) {
+    for (const id of plan.rootChildren) {
       this.rootChildIds.push(id)
       this.rootChildSet.add(id)
     }
 
-    this.root = { ...this.root, children: normalized.map((id) => ({ id })) }
-    return { ...this.root, children: normalized.map((id) => ({ id })) }
+    this.root = { ...this.root, children: plan.rootChildren.map((id) => ({ id })) }
+    return { ...this.root, children: plan.rootChildren.map((id) => ({ id })) }
   }
 
   createDataSourceComponents(): Component[] {
