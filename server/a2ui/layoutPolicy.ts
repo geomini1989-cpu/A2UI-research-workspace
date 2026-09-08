@@ -117,3 +117,45 @@ export function stableTopLevelOrder(
     .sort((a, b) => a.rank - b.rank || a.index - b.index)
     .map((item) => item.id)
 }
+
+
+export interface StableLayoutPlan {
+  rootChildren: string[]
+  generated: Component[]
+}
+
+/**
+ * Deterministic page composition for generated research results.
+ *
+ * The Agent emits business cards only. The server owns placement: all top-level
+ * MetricCards are grouped into one fixed Row; the remaining business blocks are
+ * placed according to stableTopLevelOrder. This keeps "what to show" generative
+ * while making "where it goes" deterministic.
+ */
+export function buildStableLayoutPlan(
+  ids: readonly string[],
+  byId: ReadonlyMap<string, Component>,
+): StableLayoutPlan {
+  const uniqueIds = [...new Set(ids.filter((id) => id !== 'root'))]
+  const metricIds = uniqueIds.filter((id) => byId.get(id)?.component === 'MetricCard')
+  const nonMetricIds = uniqueIds.filter((id) => byId.get(id)?.component !== 'MetricCard')
+  const generated: Component[] = []
+
+  if (metricIds.length > 0) {
+    const metricRowId = '__layout-metrics'
+    generated.push({
+      component: 'Row',
+      id: metricRowId,
+      gap: 16,
+      children: metricIds.map((id) => ({ id })),
+    })
+    const layoutMap = new Map(byId)
+    layoutMap.set(metricRowId, generated[0])
+    return {
+      rootChildren: stableTopLevelOrder([...nonMetricIds, metricRowId], layoutMap),
+      generated,
+    }
+  }
+
+  return { rootChildren: stableTopLevelOrder(nonMetricIds, byId), generated }
+}
