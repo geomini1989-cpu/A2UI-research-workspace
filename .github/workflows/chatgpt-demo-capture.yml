@@ -223,12 +223,14 @@ jobs:
             await follow.click()
             await page.getByText(/结论：这一项值得继续追踪/).waitFor({timeout:30000})
             await page.waitForTimeout(300)
+            await page.locator('.conversation-scroll').evaluate((el) => { el.scrollTop = el.scrollHeight })
+            await page.waitForTimeout(150)
             await page.screenshot({path:'artifacts/05-semantic-followup.png',fullPage:true})
           }
 
           await page.getByRole('button',{name:'新建研究'}).click()
           await page.getByText('比较 NVIDIA 与 AMD', {exact:true}).click()
-          await page.getByText('数据来源', {exact:true}).waitFor({timeout:30000})
+          await page.getByText('NVIDIA 与 AMD 综合对比（演示数据）', {exact:true}).waitFor({timeout:30000})
           await page.waitForTimeout(500)
           await page.screenshot({path:'artifacts/06-nvidia-vs-amd.png',fullPage:true})
 
