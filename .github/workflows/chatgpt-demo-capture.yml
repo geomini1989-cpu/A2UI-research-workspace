@@ -200,7 +200,7 @@ jobs:
           fs.mkdirSync('artifacts', { recursive: true })
           const browser = await chromium.launch({headless:true})
           const page = await browser.newPage({viewport:{width:1440,height:1050},deviceScaleFactor:1})
-          await page.goto('http://127.0.0.1:5173', {waitUntil:'networkidle'})
+          await page.goto('http://localhost:5173', {waitUntil:'networkidle'})
           await page.screenshot({path:'artifacts/01-home.png',fullPage:true})
 
           await page.getByText('研究 NVIDIA', {exact:true}).click()
