@@ -1,6 +1,6 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
-import { RESEARCH_CATALOG_ID, sanitizeMessage, stripCodeFences } from './a2uiSchema.js'
-import { stableTopLevelOrder } from './layoutPolicy.js'
+import { RESEARCH_CATALOG_ID, sanitizeAgentMessage, stripCodeFences } from './a2uiSchema.js'
+import { buildStableLayoutPlan, stableTopLevelOrder } from './layoutPolicy.js'
 import { normalizeMetricInteractionGroups } from './interactionConsistency.js'
 
 export interface GeneratedMessages {
@@ -186,11 +186,20 @@ export function attachRoot(messages: A2uiMessage[]): A2uiMessage[] {
   if (allIds.length === 0 || allIds.includes('root')) return messages
 
   const topLevelIds = allIds.filter((id) => id !== 'root' && !referenced.has(id))
+  const byId = new Map<string, Record<string, unknown>>()
+  for (const m of messages) {
+    if (!('updateComponents' in m)) continue
+    for (const raw of m.updateComponents.components) {
+      const component = raw as Record<string, unknown>
+      if (typeof component.id === 'string') byId.set(component.id, component)
+    }
+  }
+  const plan = buildStableLayoutPlan(topLevelIds, byId)
   const root: Record<string, unknown> = {
     component: 'Column',
     id: 'root',
     gap: 16,
-    children: topLevelIds.map((id) => ({ id })),
+    children: plan.rootChildren.map((id) => ({ id })),
   }
 
   // Shallow-clone the messages (and any updateComponents components array) so we
@@ -214,7 +223,7 @@ export function attachRoot(messages: A2uiMessage[]): A2uiMessage[] {
     const batch = result[idx] as A2uiMessage & {
       updateComponents: { surfaceId: string; components: Record<string, unknown>[] }
     }
-    batch.updateComponents.components.unshift(root)
+    batch.updateComponents.components.unshift(...plan.generated, root)
   }
   return result
 }
@@ -342,7 +351,7 @@ export function buildA2uiMessages(raw: unknown, options?: BuildOptions): Generat
   let surfaceId: string | null = null
 
   for (const item of items) {
-    const sanitized = sanitizeMessage(item)
+    const sanitized = sanitizeAgentMessage(item)
     if (!sanitized) {
       const tag = item && typeof item === 'object'
         ? Object.keys(item as object).join(',')
