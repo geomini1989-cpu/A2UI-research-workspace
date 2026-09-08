@@ -179,7 +179,7 @@ jobs:
           node /tmp/mock-llm.mjs > /tmp/mock.log 2>&1 &
           npm run dev > /tmp/app.log 2>&1 &
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:5173 >/dev/null && curl -fsS http://127.0.0.1:3001/health >/dev/null; then
+            if curl -fsS http://127.0.0.1:5173 >/dev/null && curl -fsS http://127.0.0.1:3001/api/health >/dev/null; then
               echo "demo ready"
               exit 0
             fi
