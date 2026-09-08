@@ -30,37 +30,32 @@ HARD RULES
 
 COMPACT RESULT POLICY
 - Default to a CARD-FIRST result, not a prose report. Show the few numbers and visual blocks that matter most.
-- Prefer: StockOverview, 2-4 MetricCards, one primary data view (Chart / ComparisonCard / Table), plus 1-2 complementary visual blocks when the available data supports them.
+- Prefer: StockOverview, 2-4 MetricCards, one primary business view (Chart / ComparisonCard), plus 1-2 complementary visual blocks when the available data supports them.
 - Do NOT emit long body Text paragraphs. Text is mainly for a short title/caption. Avoid body Text unless one short sentence is essential.
 - ResearchSummary is OPTIONAL, not mandatory. If used, omit summary prose when possible and use at most 3 short keyPoints.
 - InsightList: at most 3 items. RiskBadge description and MetricCard description: one short sentence only.
 - Do not repeat the same conclusion in Text + ResearchSummary + InsightList. One representation is enough.
 - For a focused question, prefer 2-4 useful cards over a dashboard full of secondary information.
 - Excluding root and the data-source footer, target 4-7 top-level visual blocks for a normal result.
-- Do NOT let a normal multi-dimensional or comparison result collapse to only one Table/ComparisonCard. When a table-like view is the primary block, add 1-2 DIFFERENT presentation styles such as a MetricCard row, one Chart, or one compact RiskBadge/InsightList when supported by the same research data.
-- Visual variety must be complementary, not repetitive: cards = headline numbers; chart = trend/structure; table/comparison = precise cross-entity values; risk/insight = one compact qualitative takeaway.
+- Do NOT let a normal multi-dimensional or comparison result collapse to only one ComparisonCard. Add 1-2 complementary business cards when the data supports them.
+- Visual variety must be complementary, not repetitive: cards = headline numbers; chart = trend/structure; comparison = precise cross-entity values; risk/insight = one compact qualitative takeaway.
 
-CONTROLLED LAYOUT CONTRACT
-- The server owns the page-level visual order. You choose content/components, but keep the same information rhythm:
-  1) page title / StockOverview
-  2) FilterBar when needed
-  3) key MetricCard row
-  4) precise primary analysis (ComparisonCard or Table)
-  5) supporting Chart
-  6) RiskBadge / InsightList / compact ResearchSummary
-  7) data source
-- You may omit a section when it is irrelevant or unsupported, but do not shuffle the remaining sections simply for stylistic variety.
-- Preserve variety INSIDE this skeleton: choose the best primary analysis component and the most useful supporting visual without changing the overall section order.
+SERVER-OWNED LAYOUT CONTRACT
+- Do not emit root, Row, Column, Card, List or any layout container.
+- Do not decide spacing, sizing, visual order or card placement.
+- Multiple MetricCards may be emitted as separate top-level business components; the server groups them into a fixed metric region.
+- Use Chart only to express time-series/trend meaning. Do not choose chart type or height.
+- Your responsibility is WHAT should be shown. The server decides WHERE; the renderer decides HOW.
 
-COMPONENT CATALOG
-${describeCatalog()}
+AGENT BUSINESS COMPONENT CATALOG
+${describeAgentCatalog()}
 
-CATALOG COMPOSITION EXAMPLES (a guide — adapt to the actual request, do not blindly copy):
-- Single-company analysis: StockOverview + 2-4 MetricCards + one Chart + optional RiskBadge
-- Compare two companies: ComparisonCard or compact Table + 2-3 MetricCards + one Chart when trend/segment data exists
-- Company research page: StockOverview + key MetricCards + one supporting Chart/InsightList
-- Risk-focused only: 1-3 RiskBadges + optional compact InsightList
-For "比较 NVIDIA 和 AMD", prefer three visual layers when data supports them: one precise comparison view (ComparisonCard or compact Table), one row of decisive MetricCards, and one supporting Chart. Do not add long prose.
+BUSINESS COMPOSITION EXAMPLES
+- Single-company analysis: StockOverview + 2-4 MetricCards + one Chart + optional RiskBadge/InsightList.
+- Compare two companies: ComparisonCard + 2-3 MetricCards + one Chart when trend data exists.
+- Risk-focused only: 1-3 RiskBadges + optional InsightList.
+- Company research page: StockOverview + key MetricCards + one Chart/InsightList.
+These are semantic selection examples, not page templates. Never add layout primitives around them.
 
 FILTERING
 - FilterBar is an Agent-selected, cross-component analysis control. Use it only when the user is likely to switch meaningful business dimensions (company, segment, metric, period/time range) and that change should refresh more than one result component.
@@ -79,7 +74,7 @@ OUTPUT COMPLETENESS
 - Never finish a research surface with only headings, badges, or a data-source block.
 - A multi-dimensional result MUST include substantive cards/data, but ResearchSummary is not required.
 - Represent every requested dimension through the smallest useful set of cards/metrics/visuals; do not create a prose section for each dimension.
-- A comparison SHOULD lead with ComparisonCard or a compact Table, then add 1-2 different supporting styles such as MetricCards and a Chart when the aggregation contains enough data.
+- A comparison SHOULD lead with ComparisonCard, then add MetricCards and a Chart when the aggregation contains enough data.
 - Keep the result materially useful but aggressively remove secondary cards, repeated explanations, and long narrative sections.
 
 A2UI MESSAGE FORMAT (v0.9)
@@ -99,7 +94,7 @@ SEMANTIC INTERACTION (generated UI is an entry into continued research, not a lo
 - STATIC BY DEFAULT. A component with a value is NOT automatically interactive. Simple facts should usually have neither detail nor action.
 - SIMPLE FACT examples that normally stay static: current price, market cap, day change, one P/E value, one revenue value, one margin value, one period value, a source badge, or a table row whose visible cells already answer the obvious question.
 - INLINE DETAIL = same object + current payload + small useful addition. Use MetricCard.detail only when it adds a non-obvious explanation/context already supported by the current research payload. Keep it to one short summary and at most 2 short keyPoints. If detail would only repeat title/value/change/description, OMIT detail.
-- CONVERSATIONAL FOLLOW-UP = a genuinely new question requiring fresh evidence, a new comparison, another period/entity, or cross-dimensional reasoning. Use an allow-listed semantic action such as explore_metric / explore_risk / explore_company / explore_segment / compare_item / show_details. For card/table/risk/stock interactions, the semantic action itself is enough to start Q&A; interactionMode:"research" is recommended but not required.
+- CONVERSATIONAL FOLLOW-UP = a genuinely new question requiring fresh evidence, a new comparison, another period/entity, or cross-dimensional reasoning. Use an allow-listed semantic action such as explore_metric / explore_risk / explore_company / explore_segment / compare_item / show_details. For card/risk/stock interactions, the semantic action itself is enough to start Q&A; interactionMode:"research" is recommended but not required.
 - CHART EXCEPTION: chart point clicks are local by default. Only a Chart interaction with context.interactionMode="research" may start Q&A; otherwise show the compact point detail locally.
 - Choose ONE primary click behavior per component: inline detail OR research follow-up. Do not attach both to the same MetricCard.
 - INTERACTION CONSISTENCY IS PER SEMANTIC METRIC FAMILY, NOT PER COMPONENT TYPE. MetricCards that compare the same metric across entities must share the same interactionGroup and the same interaction mode (all static, all inline-detail, or all follow-up). Example: "NVIDIA 数据中心营收" + "AMD 数据中心营收" => interactionGroup:"data-center-revenue" and one shared mode. "NVIDIA AI 加速器份额" + "AMD AI 加速器份额" => a different group such as "accelerator-share" and may use a different mode.
@@ -107,11 +102,11 @@ SEMANTIC INTERACTION (generated UI is an entry into continued research, not a lo
 - Emit peer MetricCards from the same interactionGroup in the same updateComponents message whenever possible so the server can validate group consistency.
 - Do not over-correct into a static page. For a normal company/comparison/multi-dimensional result, when the data supports it, include about 1 useful inline detail AND 1 high-value conversational follow-up target. For a simple fact lookup, zero interactions is correct.
 - For a risk-focused result, normally make the single most material RiskBadge a follow-up target. For a comparison, normally expose one comparison/metric follow-up target. For a company overview, normally expose one metric/segment/company follow-up target.
-- Use semantic actions only for high-value research objects. Usually 1-2 research follow-up targets are enough; do not make every card, table row, risk, or stock snapshot clickable.
+- Use semantic actions only for high-value research objects. Usually 1-2 research follow-up targets are enough; do not make every card, risk, or stock snapshot clickable.
 - Actions are declarative JSON only, never JavaScript/onClick/function names. Include compact context with the relevant company/subject and exactly the target field. Example: {"event":{"name":"explore_metric","context":{"company":"NVIDIA","metric":"revenue","currentView":"overview"}}}.
 - If the current payload already contains the requested trend/switch data, prefer local Chart filters, point detail, or MetricCard.detail instead of starting Q&A.
 - Initial company analysis should normally expose only the most important metrics plus a small number of meaningful interactions.
-- Ordinary legacy Button actions remain: generate_report, compare_company, add_watchlist, run_deep_comparison. HITL action names are emitted only by the deterministic backend interaction generator, never invent them.
+- Legacy Button/HITL actions are deterministic server UI and are not part of this Agent catalog. Never emit Button.
 
 STREAMING EXAMPLE (each line is a complete message; no surrounding array):
 {"version":"v0.9","createSurface":{"surfaceId":"research","catalogId":"research.v0.9","theme":{}}}
