@@ -1,7 +1,7 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { chatText, chatTextStream, chatWithTools, chatWithToolsStream, LlmError, type LlmMessage, type LlmToolCall } from '../llm/deepseek.js'
 import { buildA2uiMessages, attachRoot, JsonObjectStreamParser } from '../a2ui/a2uiGenerator.js'
-import { RESEARCH_CATALOG_ID, sanitizeMessage } from '../a2ui/a2uiSchema.js'
+import { RESEARCH_CATALOG_ID, sanitizeAgentMessage } from '../a2ui/a2uiSchema.js'
 import { StreamingA2uiState } from '../a2ui/streamingA2ui.js'
 import { createProgressiveResearchSurface, progressiveAgentActivity, progressiveAgentSettled, progressivePhase, progressiveRenderSteps } from '../a2ui/progressiveA2ui.js'
 import { SYSTEM_PROMPT } from './systemPrompt.js'
@@ -258,7 +258,7 @@ function createGeneratedMessageStream(
   let emitted = 0
 
   const accept = (raw: unknown) => {
-    const sanitized = sanitizeMessage(raw)
+    const sanitized = sanitizeAgentMessage(raw)
     if (!sanitized) return
     if (sanitized.dropped.length > 0) {
       console.warn('[a2ui-stream] dropped components:', sanitized.dropped)
