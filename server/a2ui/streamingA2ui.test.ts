@@ -40,7 +40,7 @@ describe('StreamingA2uiState', () => {
       { component: 'Column', id: 'root', children: [{ id: 'revenue' }, { id: 'margin' }, { id: 'pe' }] },
     ]))
 
-    expect(rootIds(message)).toEqual(['revenue', 'margin', 'pe'])
+    expect(rootIds(message)).toEqual(['__layout-metrics'])
     expect(state.hasSubstantiveContent).toBe(true)
   })
 
@@ -108,7 +108,7 @@ describe('StreamingA2uiState', () => {
       { component: 'Column', id: 'root', children: [{ id: 'risk' }, { id: 'chart' }, { id: 'metric' }, { id: 'overview' }, { id: 'title' }, { id: 'table' }] },
     ]))
 
-    expect(rootIds(message)).toEqual(['title', 'overview', 'metric', 'table', 'chart', 'risk'])
+    expect(rootIds(message)).toEqual(['title', 'overview', '__layout-metrics', 'table', 'chart', 'risk'])
   })
 
   it('keeps nested children out of the authoritative final root', () => {
