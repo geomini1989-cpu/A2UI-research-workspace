@@ -270,7 +270,7 @@ export type AgentComponentName = (typeof AGENT_COMPONENT_NAMES)[number]
 export const AGENT_COMPONENT_PROPS: Record<AgentComponentName, readonly string[]> = {
   StockOverview: ['company', 'ticker', 'price', 'change', 'marketCap', 'action'],
   MetricCard: ['title', 'value', 'change', 'description', 'interactionGroup', 'detail', 'action'],
-  ComparisonCard: ['title', 'left', 'right', 'rows', 'rowAction', 'action'],
+  ComparisonCard: ['title', 'left', 'right', 'rows', 'rowAction'],
   Chart: ['title', 'data', 'xKey', 'yKey', 'interaction', 'filters'],
   RiskBadge: ['level', 'label', 'description', 'action'],
   InsightList: ['items'],
