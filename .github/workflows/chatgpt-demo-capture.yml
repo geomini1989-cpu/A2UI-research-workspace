@@ -123,7 +123,7 @@ jobs:
             const input = JSON.parse(body || '{}')
             const messages = input.messages || []
             const system = String(messages?.[0]?.content || '')
-            const all = JSON.stringify(messages)
+            const all = JSON.stringify(messages.slice(1))
             const hasAmd = /AMD/i.test(all)
 
             if (system.includes('Financial Research Agent')) {
@@ -217,7 +217,7 @@ jobs:
             await page.screenshot({path:'artifacts/04-multi-agent-process.png',fullPage:true})
           }
 
-          const follow = page.getByRole('button',{name:'追问估值风险'})
+          const follow = page.locator('button[aria-label="追问估值风险"]')
           if (await follow.count()) {
             await follow.click()
             await page.getByText(/结论：这一项值得继续追踪/).waitFor({timeout:30000})
