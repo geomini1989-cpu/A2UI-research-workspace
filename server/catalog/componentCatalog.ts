@@ -241,6 +241,82 @@ export const CATALOG_METADATA = COMPONENT_CATALOG.map((spec) => ({
 }))
 
 /**
+ * Agent-facing catalog: intentionally much smaller than the renderer catalog.
+ *
+ * Renderer components such as Text / Row / Column / Card / Badge remain useful
+ * implementation primitives for deterministic server UI, but the LLM never gets
+ * permission to emit them. This creates a hard separation between:
+ *   - renderer capability (everything the client can render), and
+ *   - agent capability (business presentation components the model may select).
+ */
+export const AGENT_COMPONENT_NAMES = [
+  'StockOverview',
+  'MetricCard',
+  'ComparisonCard',
+  'Chart',
+  'RiskBadge',
+  'InsightList',
+  'ResearchSummary',
+  'FilterBar',
+] as const
+
+export type AgentComponentName = (typeof AGENT_COMPONENT_NAMES)[number]
+
+/**
+ * Only semantic/business props are exposed to the Agent. Presentation props
+ * such as weight, gap, size, height, type, variant and layout children are
+ * deliberately absent. The server/renderer owns those decisions.
+ */
+export const AGENT_COMPONENT_PROPS: Record<AgentComponentName, readonly string[]> = {
+  StockOverview: ['company', 'ticker', 'price', 'change', 'marketCap', 'action'],
+  MetricCard: ['title', 'value', 'change', 'description', 'interactionGroup', 'detail', 'action'],
+  ComparisonCard: ['title', 'left', 'right', 'rows', 'rowAction', 'action'],
+  Chart: ['title', 'data', 'xKey', 'yKey', 'interaction', 'filters'],
+  RiskBadge: ['level', 'label', 'description', 'action'],
+  InsightList: ['items'],
+  ResearchSummary: ['title', 'summary', 'keyPoints'],
+  FilterBar: ['title', 'filters', 'action'],
+}
+
+const AGENT_COMPONENT_DESCRIPTIONS: Partial<Record<AgentComponentName, string>> = {
+  Chart: 'A fixed-style trend chart card for ordered time-series research data. The renderer owns chart type, height, spacing and visual styling.',
+  MetricCard: 'A fixed-style business metric card. Supply semantic metric content only; the renderer owns size, spacing, typography and visual emphasis.',
+  ComparisonCard: 'A fixed-style side-by-side business comparison card for two entities and a compact set of metric rows.',
+  StockOverview: 'A fixed-style company market snapshot card. Supply company/ticker/value content only.',
+  RiskBadge: 'A fixed-style risk card whose visual severity is derived from the semantic HIGH/MEDIUM/LOW level.',
+  InsightList: 'A fixed-style compact insight card with the 1-3 most important findings.',
+  ResearchSummary: 'A fixed-style compact research summary card; keep content short.',
+  FilterBar: 'A fixed-style cross-component research filter card. Use only when changing a business dimension should refresh the broader analysis.',
+}
+
+export const AGENT_COMPONENT_CATALOG = AGENT_COMPONENT_NAMES.map((name) => {
+  const spec = COMPONENT_CATALOG.find((item) => item.name === name)
+  if (!spec) throw new Error(`Missing renderer component spec for Agent component: ${name}`)
+  const allowedProps = new Set(AGENT_COMPONENT_PROPS[name])
+  return {
+    ...spec,
+    description: AGENT_COMPONENT_DESCRIPTIONS[name] ?? spec.description,
+    props: Object.fromEntries(Object.entries(spec.props).filter(([key]) => allowedProps.has(key))),
+  }
+})
+
+export const AGENT_ALLOWED_COMPONENTS = [...AGENT_COMPONENT_NAMES]
+
+export function describeAgentCatalog(): string {
+  const lines: string[] = []
+  lines.push('AGENT BUSINESS COMPONENT CATALOG (the ONLY components the model may emit):')
+  for (const spec of AGENT_COMPONENT_CATALOG) {
+    const props = Object.entries(spec.props)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(', ')
+    lines.push(`- ${spec.name} (${spec.label}): ${spec.description} props={${props}}`)
+  }
+  lines.push('')
+  lines.push('Renderer-only primitives such as Text, Card, Row, Column, List, Divider, Badge and Button are NOT Agent capabilities.')
+  return lines.join('\n')
+}
+
+/**
  * 将目录渲染成 Agent 可读取的紧凑 Prompt 区块，列出允许的组件名，并提供业务组件摘要与属性。
  * Render the catalog into a compact Agent-readable prompt block with allowed names plus business summaries and props.
  */
