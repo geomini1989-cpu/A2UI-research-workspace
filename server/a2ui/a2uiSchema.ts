@@ -100,7 +100,14 @@ export function sanitizeAgentMessage(raw: unknown): SanitizedMessage | null {
         dropped.push(String(component.component))
         return []
       }
-      return [stripAgentPresentationProps(component as Record<string, unknown>) as typeof component]
+      const semantic = stripAgentPresentationProps(component as Record<string, unknown>)
+      // Presentation defaults are server-owned. A model may choose that a trend
+      // deserves a Chart, but it cannot choose chart type/height/styling.
+      if (semantic.component === 'Chart') {
+        semantic.type = 'line'
+        semantic.height = 220
+      }
+      return [semantic as typeof component]
     })
   }
 
