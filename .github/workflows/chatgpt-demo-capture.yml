@@ -1,0 +1,256 @@
+name: ChatGPT Demo Capture
+
+on:
+  push:
+    branches:
+      - tmp/chatgpt-demo-capture-20260908
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Verify typecheck
+        run: npm run typecheck
+
+      - name: Verify tests
+        run: npm test
+
+      - name: Verify build
+        run: npm run build
+
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Create local OpenAI-compatible mock
+        run: |
+          cat > /tmp/mock-llm.mjs <<'EOF'
+          import http from 'node:http'
+
+          const line = (obj) => JSON.stringify(obj)
+
+          function a2uiPayload(hasAmd) {
+            const common = [
+              line({version:'v0.9',createSurface:{surfaceId:'research',catalogId:'research.v0.9',theme:{}}}),
+              line({version:'v0.9',updateComponents:{surfaceId:'research',components:[
+                {component:'Text',id:'title',variant:'h2',text:hasAmd?'NVIDIA 与 AMD 综合对比（演示数据）':'NVIDIA 综合研究（演示数据）'},
+                {component:'StockOverview',id:'stock',company:'NVIDIA',ticker:'NVDA',price:'$182.40',change:'+2.8%',marketCap:'$4.45T'},
+                {component:'Column',id:'root',gap:16,children:[{id:'title'},{id:'stock'}]}
+              ]}}),
+            ]
+
+            if (hasAmd) {
+              common.push(
+                line({version:'v0.9',updateComponents:{surfaceId:'research',components:[
+                  {component:'MetricCard',id:'nv-dc',title:'NVIDIA 数据中心营收',value:'$55.0B',change:'+18%',interactionGroup:'data-center-revenue',action:{event:{name:'explore_metric',context:{company:'NVIDIA',metric:'数据中心营收',interactionMode:'research'}}}},
+                  {component:'MetricCard',id:'amd-dc',title:'AMD 数据中心营收',value:'$9.6B',change:'+14%',interactionGroup:'data-center-revenue',action:{event:{name:'explore_metric',context:{company:'AMD',metric:'数据中心营收',interactionMode:'research'}}}},
+                  {component:'Row',id:'metrics',gap:16,children:[{id:'nv-dc'},{id:'amd-dc'}]},
+                  {component:'ComparisonCard',id:'cmp',title:'核心竞争指标',left:'NVIDIA',right:'AMD',rows:[
+                    {metric:'AI 加速器生态',left:'领先',right:'追赶'},
+                    {metric:'数据中心规模',left:'更大',right:'较小'},
+                    {metric:'产品组合',left:'GPU + 网络 + 软件',right:'CPU + GPU'}
+                  ],rowAction:{event:{name:'compare_item',context:{company:'NVIDIA vs AMD',interactionMode:'research'}}}},
+                  {component:'Column',id:'root',gap:16,children:[{id:'title'},{id:'stock'},{id:'metrics'},{id:'cmp'}]}
+                ]}}),
+                line({version:'v0.9',updateComponents:{surfaceId:'research',components:[
+                  {component:'Chart',id:'chart',title:'数据中心营收趋势（演示数据）',type:'line',xKey:'period',yKey:'nvidia',data:[
+                    {period:'Q1',nvidia:44.1,amd:6.5},{period:'Q2',nvidia:47.0,amd:7.2},{period:'Q3',nvidia:51.2,amd:8.4},{period:'Q4',nvidia:55.0,amd:9.6}
+                  ],filters:{metricLabel:'公司',metrics:[{key:'nvidia',label:'NVIDIA'},{key:'amd',label:'AMD'}],defaultMetric:'nvidia',timeRanges:[{value:'all',label:'全部期间'},{value:'last-3',label:'近 3 期'},{value:'last-2',label:'近 2 期'}],defaultRange:'all'}},
+                  {component:'RiskBadge',id:'risk',level:'MEDIUM',label:'竞争与估值风险',description:'AMD 持续追赶，NVIDIA 的高预期也放大估值波动。',action:{event:{name:'explore_risk',context:{company:'NVIDIA vs AMD',risk:'竞争与估值风险',interactionMode:'research'}}}},
+                  {component:'InsightList',id:'insights',items:['NVIDIA 仍具明显规模与生态优势','AMD 在数据中心与 AI 产品上持续追赶','比较价值来自财务、市场与技术维度的联合判断']},
+                  {component:'Column',id:'root',gap:16,children:[{id:'title'},{id:'stock'},{id:'metrics'},{id:'cmp'},{id:'chart'},{id:'risk'},{id:'insights'}]}
+                ]}})
+              )
+            } else {
+              common.push(
+                line({version:'v0.9',updateComponents:{surfaceId:'research',components:[
+                  {component:'MetricCard',id:'revenue',title:'季度营收',value:'$55.0B',change:'+18%',description:'数据中心需求继续主导增长。',detail:{title:'营收驱动',summary:'增长主要来自 AI 加速计算与数据中心需求。',keyPoints:['数据中心仍是核心增长引擎','演示数据仅用于技术验证']}},
+                  {component:'MetricCard',id:'margin',title:'毛利率',value:'73.5%',change:'+0.3pp'},
+                  {component:'MetricCard',id:'valuation',title:'估值风险',value:'MEDIUM',description:'高增长预期提高波动敏感度。',action:{event:{name:'explore_metric',context:{company:'NVIDIA',metric:'估值风险',interactionMode:'research'}}}},
+                  {component:'Row',id:'metrics',gap:16,children:[{id:'revenue'},{id:'margin'},{id:'valuation'}]},
+                  {component:'Column',id:'root',gap:16,children:[{id:'title'},{id:'stock'},{id:'metrics'}]}
+                ]}}),
+                line({version:'v0.9',updateComponents:{surfaceId:'research',components:[
+                  {component:'Chart',id:'chart',title:'核心财务趋势（演示数据）',type:'line',xKey:'period',yKey:'revenueB',data:[
+                    {period:'2025 Q1',revenueB:44.1,grossMarginPct:72.5,eps:7.91},
+                    {period:'2025 Q2',revenueB:47.0,grossMarginPct:72.8,eps:8.34},
+                    {period:'2025 Q3',revenueB:51.2,grossMarginPct:73.2,eps:8.90},
+                    {period:'2025 Q4',revenueB:55.0,grossMarginPct:73.5,eps:9.40}
+                  ],filters:{metricLabel:'核心指标',metrics:[{key:'revenueB',label:'营收'},{key:'grossMarginPct',label:'毛利率'},{key:'eps',label:'EPS'}],defaultMetric:'revenueB',timeRanges:[{value:'all',label:'全部期间'},{value:'last-3',label:'近 3 期'},{value:'last-2',label:'近 2 期'}],defaultRange:'all'}},
+                  {component:'RiskBadge',id:'risk',level:'HIGH',label:'估值与预期风险',description:'高增长预期意味着业绩或产品节奏偏差可能放大估值波动。',action:{event:{name:'explore_risk',context:{company:'NVIDIA',risk:'估值与预期风险',interactionMode:'research'}}}},
+                  {component:'InsightList',id:'insights',items:['财务增长仍由数据中心主导','技术生态构成主要竞争壁垒','高估值使执行风险更值得持续跟踪']},
+                  {component:'Column',id:'root',gap:16,children:[{id:'title'},{id:'stock'},{id:'metrics'},{id:'chart'},{id:'risk'},{id:'insights'}]}
+                ]}})
+              )
+            }
+
+            common.push(line({version:'v0.9',updateComponents:{surfaceId:'research',components:[
+              {component:'Divider',id:'ds-div'},
+              {component:'Text',id:'ds-label',variant:'caption',text:'数据来源'},
+              {component:'Badge',id:'ds-badge',label:'Demo / MCP Research Tool',variant:'secondary'},
+              {component:'Column',id:'root',gap:16,children:hasAmd
+                ?[{id:'title'},{id:'stock'},{id:'metrics'},{id:'cmp'},{id:'chart'},{id:'risk'},{id:'insights'},{id:'ds-div'},{id:'ds-label'},{id:'ds-badge'}]
+                :[{id:'title'},{id:'stock'},{id:'metrics'},{id:'chart'},{id:'risk'},{id:'insights'},{id:'ds-div'},{id:'ds-label'},{id:'ds-badge'}]
+              }
+            ]}}))
+            return common
+          }
+
+          const server = http.createServer(async (req,res) => {
+            if (req.method !== 'POST' || !req.url?.endsWith('/chat/completions')) {
+              res.writeHead(404); res.end(); return
+            }
+            let body = ''
+            for await (const chunk of req) body += chunk
+            const input = JSON.parse(body || '{}')
+            const messages = input.messages || []
+            const system = String(messages?.[0]?.content || '')
+            const all = JSON.stringify(messages)
+            const hasAmd = /AMD/i.test(all)
+
+            if (system.includes('Financial Research Agent')) {
+              const content = JSON.stringify({
+                subject: hasAmd ? 'NVIDIA vs AMD' : 'NVIDIA',
+                analysisType: hasAmd ? 'company-comparison' : 'financial-analysis',
+                companies: hasAmd ? ['NVIDIA','AMD'] : ['NVIDIA'],
+                metrics: [],
+                risks: ['估值与市场预期波动风险'],
+                insights: ['数据中心仍是增长核心'],
+                summary: '财务研究已完成；结论基于 Demo MCP 数据。',
+                dataSource: 'Demo / MCP Research Tool'
+              })
+              res.setHeader('content-type','application/json')
+              res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}))
+              return
+            }
+
+            if (system.includes('研究问答助手')) {
+              const content = '结论：这一项值得继续追踪，因为它同时影响增长预期与估值弹性。\n依据：演示数据中增长仍强，但高预期会放大业绩偏差带来的波动。'
+              res.setHeader('content-type','application/json')
+              res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}))
+              return
+            }
+
+            const parts = a2uiPayload(hasAmd)
+            if (input.stream) {
+              res.writeHead(200, {'content-type':'text/event-stream','cache-control':'no-cache','connection':'keep-alive'})
+              for (const part of parts) {
+                res.write('data: '+JSON.stringify({choices:[{finish_reason:null,delta:{content:part+'\n'}}]})+'\n\n')
+                await new Promise(r=>setTimeout(r,260))
+              }
+              res.write('data: '+JSON.stringify({choices:[{finish_reason:'stop',delta:{}}]})+'\n\n')
+              res.write('data: [DONE]\n\n')
+              res.end()
+              return
+            }
+
+            const content = parts.join('\n')
+            res.setHeader('content-type','application/json')
+            res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}))
+          })
+
+          server.listen(3456,'127.0.0.1',()=>console.log('mock LLM on 3456'))
+          EOF
+
+      - name: Start demo
+        env:
+          DEEPSEEK_API_KEY: local-demo-key
+          DEEPSEEK_BASE_URL: http://127.0.0.1:3456
+          DEEPSEEK_MODEL: local-mock
+        run: |
+          node /tmp/mock-llm.mjs > /tmp/mock.log 2>&1 &
+          npm run dev > /tmp/app.log 2>&1 &
+          for i in {1..60}; do
+            if curl -fsS http://127.0.0.1:5173 >/dev/null && curl -fsS http://127.0.0.1:3001/health >/dev/null; then
+              echo "demo ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "--- app log ---"
+          cat /tmp/app.log
+          echo "--- mock log ---"
+          cat /tmp/mock.log
+          exit 1
+
+      - name: Capture demo screenshots
+        run: |
+          cat > /tmp/capture.mjs <<'EOF'
+          import { chromium } from 'playwright'
+          import fs from 'node:fs'
+
+          fs.mkdirSync('artifacts', { recursive: true })
+          const browser = await chromium.launch({headless:true})
+          const page = await browser.newPage({viewport:{width:1440,height:1050},deviceScaleFactor:1})
+          await page.goto('http://127.0.0.1:5173', {waitUntil:'networkidle'})
+          await page.screenshot({path:'artifacts/01-home.png',fullPage:true})
+
+          await page.getByText('研究 NVIDIA', {exact:true}).click()
+          await page.waitForTimeout(1200)
+          await page.screenshot({path:'artifacts/02-streaming-progress.png',fullPage:true})
+          await page.getByText('数据来源', {exact:true}).waitFor({timeout:30000})
+          await page.waitForTimeout(500)
+          await page.screenshot({path:'artifacts/03-nvidia-generative-ui.png',fullPage:true})
+
+          const processHint = page.getByText('查看过程', {exact:true})
+          if (await processHint.count()) {
+            await processHint.click()
+            await page.waitForTimeout(250)
+            await page.screenshot({path:'artifacts/04-multi-agent-process.png',fullPage:true})
+          }
+
+          const follow = page.getByRole('button',{name:'追问估值风险'})
+          if (await follow.count()) {
+            await follow.click()
+            await page.getByText(/结论：这一项值得继续追踪/).waitFor({timeout:30000})
+            await page.waitForTimeout(300)
+            await page.screenshot({path:'artifacts/05-semantic-followup.png',fullPage:true})
+          }
+
+          await page.getByRole('button',{name:'新建研究'}).click()
+          await page.getByText('比较 NVIDIA 与 AMD', {exact:true}).click()
+          await page.getByText('数据来源', {exact:true}).waitFor({timeout:30000})
+          await page.waitForTimeout(500)
+          await page.screenshot({path:'artifacts/06-nvidia-vs-amd.png',fullPage:true})
+
+          const process2 = page.getByText('查看过程', {exact:true})
+          if (await process2.count()) {
+            await process2.click()
+            await page.waitForTimeout(250)
+            await page.screenshot({path:'artifacts/07-comparison-agent-process.png',fullPage:true})
+          }
+
+          await browser.close()
+          EOF
+          node /tmp/capture.mjs
+
+      - name: Show runtime logs
+        if: always()
+        run: |
+          echo "--- app log ---"
+          tail -200 /tmp/app.log || true
+          echo "--- mock log ---"
+          tail -100 /tmp/mock.log || true
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-screenshots
+          path: artifacts/*.png
+          if-no-files-found: warn
