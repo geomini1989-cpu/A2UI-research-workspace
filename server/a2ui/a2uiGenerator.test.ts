@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { extractJsonArray, buildA2uiMessages, attachRoot, JsonObjectStreamParser } from './a2uiGenerator.js'
-import { sanitizeMessage, isAllowedComponent, RESEARCH_CATALOG_ID } from './a2uiSchema.js'
+import { sanitizeAgentMessage, sanitizeMessage, isAgentAllowedComponent, isAllowedComponent, RESEARCH_CATALOG_ID } from './a2uiSchema.js'
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 
 function stripType(m: A2uiMessage) {
@@ -82,6 +82,49 @@ describe('sanitizeMessage', () => {
   })
 })
 
+
+describe('sanitizeAgentMessage', () => {
+  it('allows business components but rejects renderer-only primitives', () => {
+    const out = sanitizeAgentMessage({
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 's',
+        components: [
+          { component: 'MetricCard', id: 'm', title: '营收', value: '1' },
+          { component: 'Row', id: 'r', children: [{ id: 'm' }] },
+          { component: 'Text', id: 't', text: '自由文本' },
+        ],
+      },
+    })
+    expect(out).not.toBeNull()
+    const comps = (out!.message as A2uiMessage & { updateComponents: { components: Record<string, unknown>[] } }).updateComponents.components
+    expect(comps.map((item) => item.component)).toEqual(['MetricCard'])
+    expect(out!.dropped).toEqual(expect.arrayContaining(['Row', 'Text']))
+  })
+
+  it('strips model-owned presentation props and applies server chart defaults', () => {
+    const out = sanitizeAgentMessage({
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 's',
+        components: [
+          { component: 'MetricCard', id: 'm', title: '营收', value: '1', weight: 9, variant: 'hero', gap: 99 },
+          { component: 'Chart', id: 'c', title: '趋势', type: 'area', height: 999, xKey: 'period', yKey: 'value', data: [{ period: 'Q1', value: 1 }] },
+        ],
+      },
+    })
+    expect(out).not.toBeNull()
+    const comps = (out!.message as A2uiMessage & { updateComponents: { components: Record<string, unknown>[] } }).updateComponents.components
+    const metric = comps.find((item) => item.id === 'm')!
+    const chart = comps.find((item) => item.id === 'c')!
+    expect(metric.weight).toBeUndefined()
+    expect(metric.variant).toBeUndefined()
+    expect(metric.gap).toBeUndefined()
+    expect(chart.type).toBe('line')
+    expect(chart.height).toBe(220)
+  })
+})
+
 describe('isAllowedComponent', () => {
   it('accepts the full component set', () => {
     for (const c of ['Text', 'Card', 'Button', 'Badge', 'TextField', 'Select', 'List', 'Row', 'Column', 'Divider', 'Table', 'Chart']) {
@@ -92,6 +135,18 @@ describe('isAllowedComponent', () => {
     expect(isAllowedComponent('iframe')).toBe(false)
     expect(isAllowedComponent('Script')).toBe(false)
     expect(isAllowedComponent(null)).toBe(false)
+  })
+})
+
+
+describe('isAgentAllowedComponent', () => {
+  it('exposes business presentation components only', () => {
+    for (const component of ['StockOverview', 'MetricCard', 'ComparisonCard', 'Chart', 'RiskBadge', 'InsightList', 'ResearchSummary', 'FilterBar']) {
+      expect(isAgentAllowedComponent(component)).toBe(true)
+    }
+    for (const component of ['Text', 'Card', 'Row', 'Column', 'Button', 'Table']) {
+      expect(isAgentAllowedComponent(component)).toBe(false)
+    }
   })
 })
 
@@ -147,7 +202,7 @@ describe('attachRoot', () => {
 })
 
 describe('buildA2uiMessages', () => {
-  it('normalizes an existing root to the controlled layout order', () => {
+  it('ignores model layout primitives and builds deterministic server layout', () => {
     const out = buildA2uiMessages([
       { version: 'v0.9', createSurface: { surfaceId: 's', catalogId: 'x', theme: {} } },
       {
@@ -156,19 +211,27 @@ describe('buildA2uiMessages', () => {
           surfaceId: 's',
           components: [
             { component: 'RiskBadge', id: 'risk', level: 'HIGH', label: '风险' },
-            { component: 'Chart', id: 'chart', data: [{ x: 'Q1', y: 1 }] },
-            { component: 'MetricCard', id: 'metric', title: '营收', value: '1' },
+            { component: 'Chart', id: 'chart', type: 'area', height: 999, data: [{ x: 'Q1', y: 1 }] },
+            { component: 'MetricCard', id: 'metric-a', title: '营收', value: '1', weight: 9 },
+            { component: 'MetricCard', id: 'metric-b', title: '毛利率', value: '2' },
             { component: 'StockOverview', id: 'overview', company: 'NVIDIA' },
-            { component: 'Text', id: 'title', variant: 'h2', text: 'NVIDIA 研究' },
-            { component: 'Table', id: 'table', columns: [{ key: 'm', label: '指标' }], rows: [{ m: '营收' }] },
-            { component: 'Column', id: 'root', children: [{ id: 'risk' }, { id: 'chart' }, { id: 'metric' }, { id: 'overview' }, { id: 'title' }, { id: 'table' }] },
+            { component: 'Text', id: 'model-title', variant: 'h2', text: '模型试图控制标题' },
+            { component: 'Column', id: 'root', children: [{ id: 'risk' }, { id: 'chart' }] },
           ],
         },
       },
     ], { dataSource: false })
+
     const components = out.messages.flatMap((m) => 'updateComponents' in m ? m.updateComponents.components : []) as Record<string, unknown>[]
+    expect(components.some((component) => component.id === 'model-title')).toBe(false)
+    const metricRow = components.find((component) => component.id === '__layout-metrics') as { children: { id: string }[] }
+    expect(metricRow.component).toBe('Row')
+    expect(metricRow.children.map((child) => child.id)).toEqual(['metric-a', 'metric-b'])
     const root = components.find((component) => component.id === 'root') as { children: { id: string }[] }
-    expect(root.children.map((child) => child.id)).toEqual(['title', 'overview', 'metric', 'table', 'chart', 'risk'])
+    expect(root.children.map((child) => child.id)).toEqual(['overview', '__layout-metrics', 'chart', 'risk'])
+    const chart = components.find((component) => component.id === 'chart')!
+    expect(chart.type).toBe('line')
+    expect(chart.height).toBe(220)
   })
 
   it('injects a createSurface when the model omits one', () => {
@@ -187,8 +250,8 @@ describe('buildA2uiMessages', () => {
   it('normalizes all updateComponents.surfaceId to the single canonical surface', () => {
     const out = buildA2uiMessages([
       { version: 'v0.9', createSurface: { surfaceId: 'research', catalogId: 'x', theme: {} } },
-      { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'Text', id: 'a', variant: 'body', text: 'x' }] } },
-      { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'Text', id: 'b', variant: 'body', text: 'y' }] } },
+      { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'MetricCard', id: 'a', title: 'A', value: '1' }] } },
+      { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'RiskBadge', id: 'b', level: 'LOW', label: 'B' }] } },
     ])
     const surfaces = out.messages
       .filter((m) => 'updateComponents' in m)
@@ -216,7 +279,7 @@ describe('data source block', () => {
     const out = buildA2uiMessages([
       {
         version: 'v0.9',
-        updateComponents: { surfaceId: 's', components: [{ component: 'Text', id: 't', variant: 'h1', text: 'hi' }] },
+        updateComponents: { surfaceId: 's', components: [{ component: 'MetricCard', id: 't', title: '营收', value: '1' }] },
       },
     ])
     const comps = allComponents(out)
@@ -230,7 +293,7 @@ describe('data source block', () => {
     expect(rootIds).toContain(badge!.id as string)
   })
 
-  it('does not duplicate a source badge the model already emitted', () => {
+  it('ignores a model-emitted source badge and injects the server-owned source block', () => {
     const out = buildA2uiMessages([
       {
         version: 'v0.9',
@@ -252,7 +315,7 @@ describe('data source block', () => {
       [
         {
           version: 'v0.9',
-          updateComponents: { surfaceId: 's', components: [{ component: 'Text', id: 't', variant: 'h1', text: 'hi' }] },
+          updateComponents: { surfaceId: 's', components: [{ component: 'MetricCard', id: 't', title: '营收', value: '1' }] },
         },
       ],
       { dataSource: false },
