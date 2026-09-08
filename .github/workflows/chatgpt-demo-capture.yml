@@ -123,8 +123,9 @@ jobs:
             const input = JSON.parse(body || '{}')
             const messages = input.messages || []
             const system = String(messages?.[0]?.content || '')
-            const all = JSON.stringify(messages.slice(1))
-            const hasAmd = /AMD/i.test(all)
+            const userText = String(messages.at(-1)?.content || '')
+            const firstLine = userText.split('\\n')[0]
+            const hasAmd = /\\bAMD\\b/i.test(firstLine)
 
             if (system.includes('Financial Research Agent')) {
               const content = JSON.stringify({
