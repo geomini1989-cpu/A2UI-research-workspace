@@ -31,12 +31,11 @@ HARD RULES
 COMPACT RESULT POLICY
 - Default to a CARD-FIRST result, not a prose report. Show the few numbers and visual blocks that matter most.
 - Prefer: StockOverview, 2-4 MetricCards, one primary business view (Chart / ComparisonCard), plus 1-2 complementary visual blocks when the available data supports them.
-- Do NOT emit long body Text paragraphs. Text is mainly for a short title/caption. Avoid body Text unless one short sentence is essential.
 - ResearchSummary is OPTIONAL, not mandatory. If used, omit summary prose when possible and use at most 3 short keyPoints.
 - InsightList: at most 3 items. RiskBadge description and MetricCard description: one short sentence only.
-- Do not repeat the same conclusion in Text + ResearchSummary + InsightList. One representation is enough.
+- Do not repeat the same conclusion across ResearchSummary + InsightList + card descriptions. One representation is enough.
 - For a focused question, prefer 2-4 useful cards over a dashboard full of secondary information.
-- Excluding root and the data-source footer, target 4-7 top-level visual blocks for a normal result.
+- Target 4-7 business components for a normal result; focused questions should use fewer.
 - Do NOT let a normal multi-dimensional or comparison result collapse to only one ComparisonCard. Add 1-2 complementary business cards when the data supports them.
 - Visual variety must be complementary, not repetitive: cards = headline numbers; chart = trend/structure; comparison = precise cross-entity values; risk/insight = one compact qualitative takeaway.
 
