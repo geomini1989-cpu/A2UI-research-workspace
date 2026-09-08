@@ -238,7 +238,7 @@ describe('buildA2uiMessages', () => {
     const out = buildA2uiMessages([
       {
         version: 'v0.9',
-        updateComponents: { surfaceId: 'custom', components: [{ component: 'Text', id: 't', variant: 'h1', text: 'hi' }] },
+        updateComponents: { surfaceId: 'custom', components: [{ component: 'MetricCard', id: 't', title: '营收', value: '1' }] },
       },
     ])
     const first = stripType(out.messages[0])
