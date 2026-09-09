@@ -15,6 +15,7 @@ export async function runMarketAgent(
   const activities: SpecialistActivity[] = []
   const report = (activity: SpecialistActivity) => { activities.push(activity); onActivity(activity) }
   const profiles: CompanyProfile[] = []
+  const provenanceByCompany = new Map<string, ToolProvenance>()
   const client = await createResearchClient()
 
   try {
@@ -23,7 +24,10 @@ export async function runMarketAgent(
       report({ stage: 'tool', message: `Calling MCP get_company_profile for ${company}` })
       const outcome = await client.callTool('get_company_profile', { company })
       const profile = (outcome.data as { profile?: CompanyProfile } | undefined)?.profile
-      if (profile) profiles.push(profile)
+      if (profile) {
+        profiles.push(profile)
+        provenanceByCompany.set(profile.name, toolProvenance(outcome.data))
+      }
     }
   } finally {
     await client.close().catch(() => {})
@@ -33,7 +37,7 @@ export async function runMarketAgent(
 
   const agentId = 'market-news'
   const evidence = profiles.map((profile) =>
-    evidenceFor(agentId, profile.name, 'get_company_profile', 'Demo market, competitor and event data accessed through MCP.'),
+    evidenceFor(agentId, profile.name, 'get_company_profile', 'Market, competitor and event data accessed through MCP.', provenanceByCompany.get(profile.name)),
   )
   const evidenceByCompany = new Map(profiles.map((profile, index) => [profile.name, evidence[index].id]))
 
@@ -102,6 +106,6 @@ export async function runMarketAgent(
     risks: profileRisks(agentId, profiles, ['competition', 'regulation', 'concentration', 'valuation'], evidenceByCompany),
     evidence,
     activities,
-    note: 'Market research is based on Demo MCP data and is not a live news feed.',
+    note: 'Market research is based on the configured MCP research provider; provider metadata is attached to evidence.',
   })
 }
