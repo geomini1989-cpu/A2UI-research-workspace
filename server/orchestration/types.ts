@@ -36,6 +36,8 @@ export interface ResearchEvidence {
   id: string
   sourceName: string
   sourceType: 'mcp' | 'demo'
+  providerId?: string
+  providerKind?: 'demo' | 'live'
   tool?: string
   ref?: string
   description?: string
