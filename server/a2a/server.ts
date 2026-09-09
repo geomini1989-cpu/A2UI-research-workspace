@@ -5,6 +5,7 @@ import { runFinancialSpecialist } from '../agent/financialAgent.js'
 import { runMarketAgent } from '../agent/marketAgent.js'
 import { runTechnologyAgent } from '../agent/technologyAgent.js'
 import type { SpecialistActivity, SpecialistResult } from '../orchestration/types.js'
+import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
 import { AGENT_CARD_PATH, FINANCIAL_A2A_PATH, MARKET_AGENT_CARD_PATH, MARKET_A2A_PATH, TECHNOLOGY_AGENT_CARD_PATH, TECHNOLOGY_A2A_PATH, createFinancialAgentCard, createMarketAgentCard, createTechnologyAgentCard } from './agentCard.js'
 
 function partText(part: Part): string { return part.content?.$case === 'text' ? part.content.value : '' }
@@ -27,8 +28,8 @@ class SpecialistAgentExecutor implements AgentExecutor {
     const publishActivity = (activity: SpecialistActivity) => bus.publish(AgentEvent.statusUpdate({ taskId, contextId, metadata: { stage: activity.stage }, status: { state: TaskState.TASK_STATE_WORKING, timestamp: new Date().toISOString(), message: statusMessage(contextId, taskId, activity.message) } }))
     try {
       const request = context.userMessage.parts.map(partText).filter(Boolean).join('\n')
-      const result = await this.runner(request, publishActivity)
-      bus.publish(AgentEvent.artifactUpdate({ taskId, contextId, append: false, lastChunk: true, metadata: undefined, artifact: { artifactId: crypto.randomUUID(), name: `${result.agentId}-research-result`, description: 'Validated unified SpecialistResult; contains no UI or executable code.', parts: [{ content: { $case: 'data', value: result }, metadata: undefined, filename: '', mediaType: 'application/json' }], metadata: { schema: 'specialist-result/v1' }, extensions: [] } }))
+      const result = assertStructuredResearchResult(await this.runner(request, publishActivity))
+      bus.publish(AgentEvent.artifactUpdate({ taskId, contextId, append: false, lastChunk: true, metadata: undefined, artifact: { artifactId: crypto.randomUUID(), name: `${result.agentId}-research-result`, description: 'Validated structured research-result/v2 artifact; contains no UI or executable code.', parts: [{ content: { $case: 'data', value: result }, metadata: undefined, filename: '', mediaType: 'application/json' }], metadata: { schema: 'research-result/v2' }, extensions: [] } }))
       bus.publish(AgentEvent.statusUpdate({ taskId, contextId, metadata: undefined, status: { state: TaskState.TASK_STATE_COMPLETED, timestamp: new Date().toISOString(), message: statusMessage(contextId, taskId, `${this.agentName} research completed`) } }))
       console.info(`[A2A] task ${taskId} completed`)
     } catch (err) {
