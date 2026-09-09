@@ -128,7 +128,7 @@ export async function runFinancialAgent(
 
   try {
     const reasoning = parseReasoning(await chatComplete(messages))
-    if (reasoning) {
+    if (reasoning && reasoning.findings.length > 0) {
       findings = reasoning.findings.flatMap((finding, index) => {
         const evidenceId = financialEvidenceByCompany.get(finding.company)
         if (!evidenceId) return []
