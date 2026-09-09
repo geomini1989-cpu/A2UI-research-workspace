@@ -1,170 +1,179 @@
+import { z } from 'zod'
+
 import { chatComplete, LlmError, type LlmMessage } from '../llm/deepseek.js'
 import { createResearchClient } from '../mcp/client.js'
-import { RESEARCH_SOURCE_LABEL } from '../mcp/tools/researchTools.js'
-import type { SpecialistResult } from '../orchestration/types.js'
+import type { CompanyProfile, FinancialSummary } from '../mcp/tools/researchTools.js'
+import type { SpecialistActivity, StructuredResearchResult } from '../orchestration/types.js'
+import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
+import { companiesInRequest } from './specialistUtils.js'
+import {
+  compactFinding,
+  evidenceFor,
+  financialMetrics,
+  financialTrends,
+  profileRisks,
+} from './structuredResultUtils.js'
 
-export type FinancialAnalysisType =
-  | 'company-analysis'
-  | 'financial-analysis'
-  | 'company-comparison'
-  | 'valuation-analysis'
-  | 'risk-analysis'
+export type FinancialActivity = SpecialistActivity
 
-export interface FinancialMetric {
-  company: string
-  category: string
-  label: string
-  value: string
-}
+const FinancialReasoningSchema = z.object({
+  findings: z.array(z.object({
+    category: z.string().min(1).max(80),
+    title: z.string().min(1).max(120),
+    detail: z.string().min(1).max(360),
+    importance: z.enum(['low', 'medium', 'high']),
+    sentiment: z.enum(['positive', 'neutral', 'negative', 'mixed']).optional(),
+    company: z.string().min(1).max(100),
+  })).max(12).default([]),
+})
 
-export interface FinancialResearchResult {
-  subject: string
-  analysisType: FinancialAnalysisType
-  companies: string[]
-  metrics: FinancialMetric[]
-  risks: string[]
-  insights: string[]
-  summary: string
-  dataSource: typeof RESEARCH_SOURCE_LABEL
-  activities?: FinancialActivity[]
-}
+const FINANCIAL_SYSTEM_PROMPT = `You are the Financial Research Agent.
+Reason only over the supplied MCP demo data. Return one strict JSON object:
+{"findings":[{"category":"...","title":"...","detail":"...","importance":"low|medium|high","sentiment":"positive|neutral|negative|mixed","company":"..."}]}
+Do not return metrics, UI, A2UI, React, markdown, executable code, or unsupported facts.
+Keep findings concise and evidence-grounded. The server builds authoritative metrics, trends, risks and evidence from MCP data.`
 
-export interface FinancialActivity {
-  stage: 'working' | 'tool'
-  message: string
-}
-
-const COMPANY_ALIASES: Record<string, string> = {
-  nvidia: 'NVIDIA', nvda: 'NVIDIA', amd: 'AMD', apple: 'Apple', aapl: 'Apple',
-  microsoft: 'Microsoft', msft: 'Microsoft', intel: 'Intel', intc: 'Intel',
-  tesla: 'Tesla', tsla: 'Tesla',
-}
-
-function companiesIn(text: string): string[] {
-  const lower = text.toLowerCase()
-  return [...new Set(Object.entries(COMPANY_ALIASES).filter(([key]) => lower.includes(key)).map(([, name]) => name))]
-}
-
-function analysisType(text: string, companyCount: number): FinancialAnalysisType {
-  const lower = text.toLowerCase()
-  if (companyCount > 1 || /比较|对比|compare|versus|\bvs\b/.test(lower)) return 'company-comparison'
-  if (/风险|risk/.test(lower) && !/增长|估值|财务|growth|valuation|financial/.test(lower)) return 'risk-analysis'
-  if (/估值|valuation|p\/e|pe\b/.test(lower)) return 'valuation-analysis'
-  if (/增长|财务|利润|营收|growth|financial|margin|revenue/.test(lower)) return 'financial-analysis'
-  return 'company-analysis'
-}
-
-function isFinancialResearchResult(value: unknown): value is FinancialResearchResult {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const v = value as Record<string, unknown>
-  return typeof v.subject === 'string' && Array.isArray(v.companies) && Array.isArray(v.metrics)
-    && Array.isArray(v.risks) && Array.isArray(v.insights) && typeof v.summary === 'string'
-}
-
-function extractJsonObject(text: string): unknown {
-  const start = text.indexOf('{')
-  const end = text.lastIndexOf('}')
-  if (start < 0 || end <= start) throw new Error('Financial Agent returned invalid JSON')
-  return JSON.parse(text.slice(start, end + 1))
-}
-
-function deterministicResult(request: string, companies: string[], toolData: Record<string, unknown>[]): FinancialResearchResult {
-  const metrics: FinancialMetric[] = []
-  for (const item of toolData) {
-    const company = typeof item.company === 'string' ? item.company : 'Company'
-    const financial = item.financial as Record<string, unknown> | undefined
-    if (!financial) continue
-    for (const category of ['revenue', 'growth', 'profitability', 'valuation', 'cashFlow', 'capitalAllocation'] as const) {
-      const rows = financial[category]
-      if (Array.isArray(rows)) for (const row of rows as { label?: string; value?: string }[]) {
-        if (row.label && row.value) metrics.push({ company, category, label: row.label, value: row.value })
-      }
-    }
-    const history = financial.history
-    if (Array.isArray(history)) {
-      for (const point of history as { period?: string; revenueB?: number; grossMarginPct?: number; operatingMarginPct?: number; eps?: number }[]) {
-        if (!point.period) continue
-        if (typeof point.revenueB === 'number') metrics.push({ company, category: 'trend-revenue', label: `${point.period} Revenue`, value: `${point.revenueB}B` })
-        if (typeof point.grossMarginPct === 'number') metrics.push({ company, category: 'trend-gross-margin', label: `${point.period} Gross Margin`, value: `${point.grossMarginPct}%` })
-        if (typeof point.operatingMarginPct === 'number') metrics.push({ company, category: 'trend-operating-margin', label: `${point.period} Operating Margin`, value: `${point.operatingMarginPct}%` })
-        if (typeof point.eps === 'number') metrics.push({ company, category: 'trend-eps', label: `${point.period} EPS`, value: String(point.eps) })
-      }
+function parseReasoning(text: string) {
+  try {
+    return FinancialReasoningSchema.parse(JSON.parse(text))
+  } catch {
+    const start = text.indexOf('{')
+    const end = text.lastIndexOf('}')
+    if (start < 0 || end <= start) return null
+    try {
+      return FinancialReasoningSchema.parse(JSON.parse(text.slice(start, end + 1)))
+    } catch {
+      return null
     }
   }
-  const subject = companies.join(' vs ') || 'Requested companies'
-  const type = analysisType(request, companies.length)
-  return {
-    subject,
-    analysisType: type,
-    companies,
-    metrics,
-    risks: ['估值与市场预期波动风险', '行业竞争及技术迭代风险', 'Demo 数据不代表实时市场状况'],
-    insights: metrics.slice(0, 4).map((m) => `${m.company} ${m.label}: ${m.value}`),
-    summary: `${subject} 的${type === 'company-comparison' ? '对比研究' : '专业研究'}已完成；结论基于 Demo MCP 数据，仅供架构演示。`,
-    dataSource: RESEARCH_SOURCE_LABEL,
-  }
 }
-
-const FINANCIAL_SYSTEM_PROMPT = `You are the Financial Research Agent. Analyze fundamentals, financial metrics, company comparisons, valuation and risks. Use only the supplied MCP tool data. Return one JSON object with subject, analysisType, companies, metrics, risks, insights, summary, dataSource. Never output React, JSX, HTML, JavaScript, A2UI, markdown, or executable code. Clearly state that figures are demo data.`
 
 export async function runFinancialAgent(
   request: string,
   onActivity: (activity: FinancialActivity) => void = () => {},
-): Promise<FinancialResearchResult> {
+): Promise<StructuredResearchResult> {
+  const companies = companiesInRequest(request)
+  if (companies.length === 0) throw new Error('No supported company found in the financial research request')
+
   const activities: FinancialActivity[] = []
   const report = (activity: FinancialActivity) => { activities.push(activity); onActivity(activity) }
-  const companies = companiesIn(request)
-  if (companies.length === 0) throw new Error('No supported company found in the request')
+  const profiles: CompanyProfile[] = []
+  const financials = new Map<string, FinancialSummary>()
   const client = await createResearchClient()
-  const toolData: Record<string, unknown>[] = []
+
   try {
-    report({ stage: 'working', message: 'Analyzing financial research request' })
+    report({ stage: 'working', message: 'Analyzing fundamentals, valuation and financial risk' })
     for (const company of companies) {
       report({ stage: 'tool', message: `Calling MCP get_company_profile for ${company}` })
-      await client.callTool('get_company_profile', { company })
+      const profileOutcome = await client.callTool('get_company_profile', { company })
+      const profile = (profileOutcome.data as { profile?: CompanyProfile } | undefined)?.profile
+      if (profile) profiles.push(profile)
+
       report({ stage: 'tool', message: `Calling MCP get_financial_summary for ${company}` })
-      const result = await client.callTool('get_financial_summary', { company })
-      if (result.data && typeof result.data === 'object') toolData.push(result.data as Record<string, unknown>)
+      const financialOutcome = await client.callTool('get_financial_summary', { company })
+      const data = financialOutcome.data as { company?: string; financial?: FinancialSummary } | undefined
+      if (data?.financial) financials.set(data.company ?? profile?.name ?? company, data.financial)
     }
   } finally {
     await client.close().catch(() => {})
   }
 
-  const fallback = deterministicResult(request, companies, toolData)
+  if (financials.size === 0) throw new Error('Financial Agent received no usable financial data')
+
+  const agentId = 'financial'
+  const entities = profiles.length > 0
+    ? profiles.map((profile) => ({ name: profile.name, ticker: profile.ticker }))
+    : companies.map((name) => ({ name }))
+
+  const evidence = [...financials.keys()].map((company) =>
+    evidenceFor(agentId, company, 'get_financial_summary', 'Demo financial summary and history accessed through MCP.'),
+  )
+  const evidenceByCompany = new Map([...financials.keys()].map((company, index) => [company, evidence[index].id]))
+
+  const metrics = [...financials.entries()].flatMap(([company, financial]) =>
+    financialMetrics(company, financial, evidenceByCompany.get(company)!),
+  )
+  const trends = [...financials.entries()].flatMap(([company, financial]) =>
+    financialTrends(company, financial, evidenceByCompany.get(company)!),
+  )
+
+  const profileEvidence = new Map<string, string>()
+  for (const profile of profiles) {
+    const existing = evidenceByCompany.get(profile.name)
+    if (existing) profileEvidence.set(profile.name, existing)
+  }
+
+  let findings = metrics.slice(0, 4).map((metric, index) =>
+    compactFinding(
+      agentId,
+      metric.company ?? companies[0],
+      'headline-metric',
+      metric.label,
+      `${metric.company ?? ''} ${metric.label}: ${metric.value}`.trim(),
+      index < 2 ? 'high' : 'medium',
+      metric.evidenceIds[0],
+      index,
+      'neutral',
+    ),
+  )
+
+  const reasoningPayload = {
+    request,
+    entities,
+    financials: Object.fromEntries(financials),
+  }
   const messages: LlmMessage[] = [
     { role: 'system', content: FINANCIAL_SYSTEM_PROMPT },
-    { role: 'user', content: `Request: ${request}\nMCP data: ${JSON.stringify(toolData)}\nReturn strict JSON.` },
+    { role: 'user', content: JSON.stringify(reasoningPayload) },
   ]
+
   try {
-    const parsed = extractJsonObject(await chatComplete(messages))
-    if (!isFinancialResearchResult(parsed)) throw new Error('Structured result schema validation failed')
-    const metricKey = (metric: FinancialMetric) => `${metric.company}|${metric.category}|${metric.label}`
-    const combinedMetrics = new Map<string, FinancialMetric>()
-    for (const metric of [...fallback.metrics, ...parsed.metrics]) combinedMetrics.set(metricKey(metric), metric)
-    return {
-      ...parsed,
-      analysisType: analysisType(request, companies.length),
-      companies,
-      metrics: [...combinedMetrics.values()],
-      dataSource: RESEARCH_SOURCE_LABEL,
-      activities,
+    const reasoning = parseReasoning(await chatComplete(messages))
+    if (reasoning) {
+      findings = reasoning.findings.flatMap((finding, index) => {
+        const evidenceId = evidenceByCompany.get(finding.company)
+        if (!evidenceId) return []
+        return [compactFinding(
+          agentId,
+          finding.company,
+          finding.category,
+          finding.title,
+          finding.detail,
+          finding.importance,
+          evidenceId,
+          index,
+          finding.sentiment,
+        )]
+      })
     }
-  } catch (err) {
-    if (!(err instanceof LlmError) || err.code !== 'NO_API_KEY') {
-      console.warn('[financial-agent] structured synthesis fallback:', err)
+  } catch (error) {
+    if (!(error instanceof LlmError) || error.code !== 'NO_API_KEY') {
+      console.warn('[financial-agent] structured reasoning fallback:', error)
     }
-    return { ...fallback, activities }
   }
+
+  const result = {
+    schemaVersion: 'research-result/v2' as const,
+    agentId,
+    dimension: 'financial' as const,
+    subject: entities.map((entity) => entity.name).join(' vs '),
+    entities,
+    metrics,
+    trends,
+    findings,
+    risks: profileRisks(
+      agentId,
+      profiles,
+      ['valuation', 'competition', 'concentration', 'regulation', 'execution'],
+      profileEvidence,
+    ),
+    evidence,
+    activities,
+    note: 'Financial metrics are authoritative MCP demo values; LLM reasoning is optional, structured and contract-validated.',
+  }
+
+  return assertStructuredResearchResult(result)
 }
 
-export async function runFinancialSpecialist(request: string, onActivity: (activity: FinancialActivity) => void = () => {}): Promise<SpecialistResult> {
-  const result = await runFinancialAgent(request, onActivity)
-  return {
-    agentId: 'financial', taskType: 'financial', subject: result.subject, summary: result.summary,
-    insights: result.insights.map((detail, index) => ({ title: `Financial insight ${index + 1}`, detail, sentiment: 'neutral' })),
-    risks: result.risks.map((detail, index) => ({ title: `Financial risk ${index + 1}`, detail, level: index === 0 ? 'high' : 'medium' })),
-    metrics: result.metrics.map((metric) => ({ label: metric.label, value: metric.value, company: metric.company, category: metric.category })),
-    sources: [{ name: result.dataSource, type: 'demo', description: 'Demo financial and company data accessed through MCP.' }],
-    activities: result.activities ?? [],
-  }
-}
+/** A2A runner retained for the Financial Agent endpoint. */
+export const runFinancialSpecialist = runFinancialAgent
