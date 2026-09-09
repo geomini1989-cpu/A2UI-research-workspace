@@ -150,6 +150,25 @@ export interface AggregationContext {
   evidence: ResearchEvidence[]
 }
 
+export interface CoordinatorResearchDimension {
+  dimension: ResearchDimension
+  subject: string
+  entities: ResearchEntity[]
+  metrics: ResearchMetric[]
+  trends: ResearchTrend[]
+  findings: ResearchFinding[]
+  risks: ResearchRisk[]
+}
+
+export interface CoordinatorResearchContext {
+  schemaVersion: 'coordinator-research-context/v2'
+  subject: string
+  dimensions: Partial<Record<ResearchDimension, CoordinatorResearchDimension>>
+  unavailable: AggregationContext['unavailable']
+  unmatchedSkills: RequiredSkill[]
+  evidence: ResearchEvidence[]
+}
+
 export type AgentActivityEvent =
   | { stage: 'planning'; actor: 'Research Coordinator'; detail: string }
   | { stage: 'agent_discovered'; actor: string; detail: string }
