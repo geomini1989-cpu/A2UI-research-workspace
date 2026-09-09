@@ -53,7 +53,7 @@ describe('real A2A HTTP transport', () => {
     const activities: string[] = []
     const outcome = await dispatchFinancialTask(card, '比较 NVIDIA 和 AMD 的增长、估值和风险', 30_000, injectedFetch, (activity) => activities.push(activity.message))
     expect(outcome.taskId).toBeTruthy()
-    expect(outcome.result).toMatchObject({ taskType: 'financial', subject: 'NVIDIA vs AMD', sources: expect.arrayContaining([expect.objectContaining({ name: expect.stringContaining('MCP') })]) })
+    expect(outcome.result).toMatchObject({ schemaVersion: 'research-result/v2', dimension: 'financial', subject: 'NVIDIA vs AMD', evidence: expect.arrayContaining([expect.objectContaining({ sourceName: expect.stringContaining('MCP') })]) })
     expect(outcome.result.metrics.length).toBeGreaterThan(0)
     expect(activities.some((activity) => activity.includes('MCP'))).toBe(true)
     const cardResponse = await injectedFetch(`http://127.0.0.1:32191${AGENT_CARD_PATH}`)
@@ -92,7 +92,7 @@ describe('real A2A HTTP transport', () => {
     }
     const market = await dispatchFinancialTask(cards[1], '总结 NVIDIA 最近的市场变化', 30_000, injectedFetch)
     const technology = await dispatchFinancialTask(cards[2], '分析 NVIDIA 的产品和技术竞争力', 30_000, injectedFetch)
-    expect(market.result.taskType).toBe('market')
-    expect(technology.result.taskType).toBe('technology')
+    expect(market.result.dimension).toBe('market')
+    expect(technology.result.dimension).toBe('technology')
   })
 })
