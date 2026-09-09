@@ -1,5 +1,5 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
-import { RESEARCH_CATALOG_ID, sanitizeAgentMessage, stripCodeFences } from './a2uiSchema.js'
+import { RESEARCH_CATALOG_ID, sanitizeAgentMessage, sanitizeMessage, stripCodeFences } from './a2uiSchema.js'
 import { buildStableLayoutPlan, stableTopLevelOrder } from './layoutPolicy.js'
 import { normalizeMetricInteractionGroups } from './interactionConsistency.js'
 
@@ -395,4 +395,58 @@ export function buildA2uiMessages(raw: unknown, options?: BuildOptions): Generat
   const withSource = options?.dataSource === false ? messages : ensureDataSource(messages)
   const rooted = attachRoot(withSource)
   return { messages: stabilizeRootLayout(rooted), droppedComponents, errors }
+}
+
+
+/**
+ * Build deterministic server-authored A2UI.
+ *
+ * This path deliberately uses the full trusted renderer catalog and preserves
+ * an explicit server-owned root/layout. It must never be used for LLM output.
+ */
+export function buildTrustedA2uiMessages(
+  raw: readonly unknown[],
+  options?: BuildOptions,
+): GeneratedMessages {
+  const messages: A2uiMessage[] = []
+  const droppedComponents: string[] = []
+  const errors: string[] = []
+  let surfaceId: string | null = null
+
+  for (const item of raw) {
+    const sanitized = sanitizeMessage(item)
+    if (!sanitized) {
+      const tag = item && typeof item === 'object'
+        ? Object.keys(item as object).join(',')
+        : typeof item
+      errors.push(`skipped invalid trusted message (keys: ${tag || 'n/a'})`)
+      continue
+    }
+
+    const msg = sanitized.message
+    droppedComponents.push(...sanitized.dropped)
+    if ('createSurface' in msg) surfaceId = msg.createSurface.surfaceId
+    else if (surfaceId === null) {
+      if ('updateComponents' in msg) surfaceId = msg.updateComponents.surfaceId
+      else if ('updateDataModel' in msg) surfaceId = msg.updateDataModel.surfaceId
+    }
+    messages.push(msg)
+  }
+
+  const canonicalId = options?.surfaceId ?? surfaceId ?? 'research'
+  if (!messages.some((message) => 'createSurface' in message)) {
+    messages.unshift({
+      version: 'v0.9',
+      createSurface: { surfaceId: canonicalId, catalogId: RESEARCH_CATALOG_ID, theme: {} },
+    })
+  }
+
+  for (const message of messages) {
+    if ('createSurface' in message) message.createSurface.surfaceId = canonicalId
+    if ('updateComponents' in message) message.updateComponents.surfaceId = canonicalId
+    if ('updateDataModel' in message) message.updateDataModel.surfaceId = canonicalId
+  }
+
+  const withSource = options?.dataSource === false ? messages : ensureDataSource(messages)
+  return { messages: attachRoot(withSource), droppedComponents, errors }
 }
