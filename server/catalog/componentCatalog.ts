@@ -241,70 +241,108 @@ export const CATALOG_METADATA = COMPONENT_CATALOG.map((spec) => ({
 }))
 
 /**
- * Agent-facing catalog: intentionally much smaller than the renderer catalog.
+ * Agent-facing business catalog.
  *
- * Renderer components such as Text / Row / Column / Card / Badge remain useful
- * implementation primitives for deterministic server UI, but the LLM never gets
- * permission to emit them. This creates a hard separation between:
- *   - renderer capability (everything the client can render), and
- *   - agent capability (business presentation components the model may select).
+ * These names are intentionally NOT the same as low-level renderer primitives.
+ * A semantic Agent component is mapped to one fixed renderer implementation by
+ * the server. This prevents the model from depending on React/layout details.
  */
 export const AGENT_COMPONENT_NAMES = [
-  'StockOverview',
+  'StockOverviewCard',
   'MetricCard',
   'ComparisonCard',
-  'Chart',
-  'RiskBadge',
-  'InsightList',
-  'ResearchSummary',
-  'FilterBar',
+  'TrendChartCard',
+  'RiskCard',
+  'InsightCard',
+  'ResearchSummaryCard',
+  'FilterCard',
 ] as const
 
 export type AgentComponentName = (typeof AGENT_COMPONENT_NAMES)[number]
 
-/**
- * Only semantic/business props are exposed to the Agent. Presentation props
- * such as weight, gap, size, height, type, variant and layout children are
- * deliberately absent. The server/renderer owns those decisions.
- */
-export const AGENT_COMPONENT_PROPS: Record<AgentComponentName, readonly string[]> = {
-  StockOverview: ['company', 'ticker', 'price', 'change', 'marketCap', 'action'],
-  MetricCard: ['title', 'value', 'change', 'description', 'interactionGroup', 'detail', 'action'],
-  ComparisonCard: ['title', 'left', 'right', 'rows', 'rowAction'],
-  Chart: ['title', 'data', 'xKey', 'yKey', 'interaction', 'filters'],
-  RiskBadge: ['level', 'label', 'description', 'action'],
-  InsightList: ['items'],
-  ResearchSummary: ['title', 'summary', 'keyPoints'],
-  FilterBar: ['title', 'filters', 'action'],
+export const AGENT_TO_RENDERER_COMPONENT: Record<AgentComponentName, string> = {
+  StockOverviewCard: 'StockOverview',
+  MetricCard: 'MetricCard',
+  ComparisonCard: 'ComparisonCard',
+  TrendChartCard: 'Chart',
+  RiskCard: 'RiskBadge',
+  InsightCard: 'InsightList',
+  ResearchSummaryCard: 'ResearchSummary',
+  FilterCard: 'FilterBar',
 }
 
-const AGENT_COMPONENT_DESCRIPTIONS: Partial<Record<AgentComponentName, string>> = {
-  Chart: 'A fixed-style trend chart card for ordered time-series research data. The renderer owns chart type, height, spacing and visual styling.',
-  MetricCard: 'A fixed-style business metric card. Supply semantic metric content only; the renderer owns size, spacing, typography and visual emphasis.',
-  ComparisonCard: 'A fixed-style side-by-side business comparison card for two entities and a compact set of metric rows.',
-  StockOverview: 'A fixed-style company market snapshot card. Supply company/ticker/value content only.',
-  RiskBadge: 'A fixed-style risk card whose visual severity is derived from the semantic HIGH/MEDIUM/LOW level.',
-  InsightList: 'A fixed-style compact insight card with the 1-3 most important findings.',
-  ResearchSummary: 'A fixed-style compact research summary card; keep content short.',
-  FilterBar: 'A fixed-style cross-component research filter card. Use only when changing a business dimension should refresh the broader analysis.',
+export interface AgentComponentSpec {
+  name: AgentComponentName
+  label: string
+  description: string
+  props: Record<string, string>
+  required: string[]
 }
 
-export const AGENT_COMPONENT_CATALOG = AGENT_COMPONENT_NAMES.map((name) => {
-  const spec = COMPONENT_CATALOG.find((item) => item.name === name)
-  if (!spec) throw new Error(`Missing renderer component spec for Agent component: ${name}`)
-  const allowedProps = new Set(AGENT_COMPONENT_PROPS[name])
-  return {
-    ...spec,
-    description: AGENT_COMPONENT_DESCRIPTIONS[name] ?? spec.description,
-    props: Object.fromEntries(Object.entries(spec.props).filter(([key]) => allowedProps.has(key))),
-  }
-})
+export const AGENT_COMPONENT_CATALOG: AgentComponentSpec[] = [
+  {
+    name: 'StockOverviewCard',
+    label: 'Stock Overview Card',
+    description: 'Fixed-style company snapshot card. Supply company identity and market values only.',
+    props: { company: 'string', ticker: 'string?', price: 'string?', change: 'string?', marketCap: 'string?', action: 'semanticAction?' },
+    required: ['company'],
+  },
+  {
+    name: 'MetricCard',
+    label: 'Metric Card',
+    description: 'Fixed-style business metric card. Supply semantic metric content only; no layout or styling props.',
+    props: { title: 'string', value: 'string', change: 'string?', description: 'short string?', interactionGroup: 'string?', detail: 'inlineDetail?', action: 'semanticAction?' },
+    required: ['title', 'value'],
+  },
+  {
+    name: 'ComparisonCard',
+    label: 'Comparison Card',
+    description: 'Fixed-style two-entity comparison card with a compact metric-row set.',
+    props: { title: 'string?', left: 'string?', right: 'string?', rows: 'array<{metric,left,right}>', rowAction: 'semanticAction?' },
+    required: ['rows'],
+  },
+  {
+    name: 'TrendChartCard',
+    label: 'Trend Chart Card',
+    description: 'Fixed-style time-series chart card. The renderer owns chart type, dimensions and visual styling.',
+    props: { title: 'string?', data: 'array<object>', xKey: 'string?', yKey: 'string?', interaction: 'chartInteraction?', filters: 'chartFilters?' },
+    required: ['data'],
+  },
+  {
+    name: 'RiskCard',
+    label: 'Risk Card',
+    description: 'Fixed-style risk card. HIGH/MEDIUM/LOW is semantic severity; the renderer owns its visual treatment.',
+    props: { level: 'HIGH|MEDIUM|LOW', label: 'string?', description: 'short string?', action: 'semanticAction?' },
+    required: ['level'],
+  },
+  {
+    name: 'InsightCard',
+    label: 'Insight Card',
+    description: 'Fixed-style compact card containing the 1-3 most important findings.',
+    props: { items: 'array<string> (1-3)' },
+    required: ['items'],
+  },
+  {
+    name: 'ResearchSummaryCard',
+    label: 'Research Summary Card',
+    description: 'Fixed-style compact takeaway card with short summary text and up to 3 key points.',
+    props: { title: 'string?', summary: 'short string?', keyPoints: 'array<string> (max 3)' },
+    required: [],
+  },
+  {
+    name: 'FilterCard',
+    label: 'Analysis Filter Card',
+    description: 'Fixed-style cross-component filter card used only when business-scope changes should rerun broader analysis.',
+    props: { title: 'string?', filters: 'array<filter>', action: 'apply_filters semanticAction' },
+    required: ['filters', 'action'],
+  },
+]
 
 export const AGENT_ALLOWED_COMPONENTS = [...AGENT_COMPONENT_NAMES]
 
 export function describeAgentCatalog(): string {
   const lines: string[] = []
-  lines.push('AGENT BUSINESS COMPONENT CATALOG (the ONLY components the model may emit):')
+  lines.push('AGENT BUSINESS COMPONENT CATALOG (the ONLY semantic UI components the model may emit):')
   for (const spec of AGENT_COMPONENT_CATALOG) {
     const props = Object.entries(spec.props)
       .map(([key, value]) => `${key}: ${value}`)
@@ -312,7 +350,7 @@ export function describeAgentCatalog(): string {
     lines.push(`- ${spec.name} (${spec.label}): ${spec.description} props={${props}}`)
   }
   lines.push('')
-  lines.push('Renderer-only primitives such as Text, Card, Row, Column, List, Divider, Badge and Button are NOT Agent capabilities.')
+  lines.push('These are semantic business components. Renderer primitives and concrete React component names are server-internal.')
   return lines.join('\n')
 }
 
