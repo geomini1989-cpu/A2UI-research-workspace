@@ -1,7 +1,7 @@
 import type { AgentCard } from '@a2a-js/sdk'
 import { dispatchSpecialistTask, type A2aDispatchOutcome } from '../a2a/client.js'
 import { matchAgentsBySkills } from '../registry/agentRegistry.js'
-import type { AggregationContext, AgentActivityEvent, DelegationPlan, DelegationResult, NeedUserInput, RequiredSkill, SpecialistResult, TaskRequirement } from './types.js'
+import type { AggregationContext, AgentActivityEvent, CoordinatorResearchContext, DelegationPlan, DelegationResult, NeedUserInput, RequiredSkill, SpecialistResult, TaskRequirement } from './types.js'
 
 const unique = <T>(items: T[]): T[] => [...new Set(items)]
 
@@ -102,6 +102,40 @@ export function aggregateSpecialistResults(results: DelegationResult[], plan: De
     completedAgents: completed.map((item) => item.agentName),
     schemaVersion: 'aggregation-context/v2',
     evidence: [...new Map(completed.flatMap((item) => item.result.evidence).map((item) => [item.id, item])).values()],
+  }
+}
+
+/**
+ * Project specialist outputs into the exact structured payload the Coordinator
+ * needs for UI synthesis. Operational activities/notes never enter the LLM
+ * presentation prompt, reducing token noise and preventing log text from being
+ * mistaken for research evidence.
+ */
+export function buildCoordinatorResearchContext(
+  aggregation: AggregationContext,
+): CoordinatorResearchContext {
+  const dimensions: CoordinatorResearchContext['dimensions'] = {}
+  for (const [dimension, result] of Object.entries(aggregation.dimensions)) {
+    if (!result) continue
+    const key = dimension as keyof CoordinatorResearchContext['dimensions']
+    dimensions[key] = {
+      dimension: result.dimension,
+      subject: result.subject,
+      entities: result.entities,
+      metrics: result.metrics,
+      trends: result.trends,
+      findings: result.findings,
+      risks: result.risks,
+    }
+  }
+
+  return {
+    schemaVersion: 'coordinator-research-context/v2',
+    subject: aggregation.subject,
+    dimensions,
+    unavailable: aggregation.unavailable,
+    unmatchedSkills: aggregation.unmatchedSkills,
+    evidence: aggregation.evidence,
   }
 }
 
