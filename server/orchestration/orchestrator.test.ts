@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createFinancialAgentCard, createMarketAgentCard, createTechnologyAgentCard } from '../a2a/agentCard.js'
 import { clearAgentRegistry, registerAgent } from '../registry/agentRegistry.js'
-import { aggregateSpecialistResults, analyzeTaskRequirements, createDelegationPlan, executeDelegationPlan, findSpecialistNeedInput } from './orchestrator.js'
+import { aggregateSpecialistResults, analyzeTaskRequirements, buildCoordinatorResearchContext, createDelegationPlan, executeDelegationPlan, findSpecialistNeedInput } from './orchestrator.js'
 import type { SpecialistResult } from './types.js'
 
 beforeEach(() => {
@@ -97,6 +97,29 @@ describe('parallel delegation, partial failure, and aggregation', () => {
     const plan = createDelegationPlan(requirement)
     expect(plan.delegations).toEqual([])
     expect(plan.unmatchedSkills).toContain('product-analysis')
+  })
+
+  it('projects only research fields into the Coordinator synthesis context', () => {
+    const financial = result('financial')
+    financial.activities = [{ stage: 'tool', message: 'internal MCP log' }]
+    financial.note = 'internal operator note'
+    financial.findings = [{
+      id: 'financial:finding:nvidia:1',
+      category: 'growth',
+      title: 'Growth',
+      detail: 'Structured finding',
+      importance: 'high',
+      evidenceIds: ['financial:source:nvidia'],
+    }]
+    const aggregation = aggregateSpecialistResults([
+      { agentName: 'Financial', matchedSkills: ['financial-analysis'], status: 'completed', result: financial },
+    ], { requirement: { requiredSkills: ['financial-analysis'], canRunInParallel: false, useCoordinatorMcp: false }, delegations: [], unmatchedSkills: [] }, 'NVIDIA')
+
+    const context = buildCoordinatorResearchContext(aggregation)
+    expect(context.schemaVersion).toBe('coordinator-research-context/v2')
+    expect(context.dimensions.financial?.findings).toHaveLength(1)
+    expect(JSON.stringify(context)).not.toContain('internal MCP log')
+    expect(JSON.stringify(context)).not.toContain('internal operator note')
   })
 
   it('forwards a structured Specialist NeedUserInput to the Coordinator boundary', () => {
