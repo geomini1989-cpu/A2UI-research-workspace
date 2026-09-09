@@ -11,7 +11,7 @@ import {
   ResearchToolError,
 } from '../mcp/tools/researchTools.js'
 import { createResearchClient, type ResearchClient } from '../mcp/client.js'
-import { aggregateSpecialistResults, analyzeTaskRequirements, createDelegationPlan, executeDelegationPlan, findSpecialistNeedInput, requirementForDimensions } from '../orchestration/orchestrator.js'
+import { aggregateSpecialistResults, analyzeTaskRequirements, buildCoordinatorResearchContext, createDelegationPlan, executeDelegationPlan, findSpecialistNeedInput, requirementForDimensions } from '../orchestration/orchestrator.js'
 import type { AgentActivityEvent } from '../orchestration/types.js'
 import type { ResearchDimension } from '../interaction/types.js'
 import { decideInteraction, isExplicitPlanReview } from '../interaction/interactionPolicy.js'
@@ -399,7 +399,7 @@ async function runCoordinatorResearch(
       if (progressive) for (const message of progressivePhase(progressive.surfaceId, 'synthesizing')) emit({ type: 'message', message })
       const synthesisMessages: LlmMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `原始研究意图：${userMessage}\n以下为 Main Coordinator 通过 Agent Discovery 与 A2A 收集到的聚合结果。只针对当前下钻意图生成一个新的、聚焦的 A2UI surface：\n${JSON.stringify(aggregation)}` },
+        { role: 'user', content: `原始研究意图：${userMessage}\n以下为经过服务端投影的 coordinator-research-context/v2。它只包含结构化研究事实、判断、风险和证据，不包含 Specialist 运行日志。只针对当前研究意图选择合适的业务卡片并生成 A2UI：\n${JSON.stringify(buildCoordinatorResearchContext(aggregation))}` },
       ]
       return onContentDelta
         ? chatTextStream(synthesisMessages, onContentDelta)
