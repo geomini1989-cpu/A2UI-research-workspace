@@ -169,7 +169,7 @@ export function validateAndCompileBusinessComponent(
   const parsed = contracts[agentComponent].safeParse(raw)
   if (!parsed.success) return null
 
-  const component = {
+  const component: Record<string, unknown> = {
     ...(parsed.data as Record<string, unknown>),
     component: AGENT_TO_RENDERER_COMPONENT[agentComponent],
   }
