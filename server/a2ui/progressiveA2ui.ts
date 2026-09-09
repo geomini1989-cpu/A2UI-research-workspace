@@ -238,7 +238,7 @@ export function progressiveAgentSettled(
   const key = progressiveAgentKey(result.agentName)
   const succeeded = result.status === 'completed' && Boolean(result.result)
   const detail = succeeded
-    ? result.result!.summary
+    ? result.result!.note ?? `${result.result!.findings.length} findings · ${result.result!.metrics.length} metrics`
     : `专业 Agent 暂不可用：${result.error ?? '未知错误'}`
   return validated([
     {
