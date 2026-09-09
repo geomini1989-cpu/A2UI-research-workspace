@@ -19,15 +19,15 @@ export interface ResearchClient {
 }
 
 /**
- * Connect a real MCP `Client` to the in-process Research server over an
- * in-memory transport. This performs a genuine MCP handshake and routes tool
+ * Connect an MCP `Client` to the provider-backed in-process Research server
+ * over an in-memory transport. This performs a genuine MCP handshake and routes tool
  * calls through the protocol — the backend agent never executes tools directly.
  */
 export async function createResearchClient(): Promise<ResearchClient> {
   const server = createResearchServer()
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
 
-  const client = new Client({ name: 'research-demo-client', version: '1.0.0' })
+  const client = new Client({ name: 'research-provider-client', version: '1.1.0' })
   // The server must be listening before the client sends its `initialize`
   // handshake, otherwise `client.connect()` hangs forever. Start the server
   // side first, then connect the client. Either may reject if the pair fails to
