@@ -7,19 +7,41 @@ import type {
   ResearchTrend,
 } from '../orchestration/types.js'
 
+export interface ToolProvenance {
+  providerId?: string
+  providerKind?: 'demo' | 'live'
+  sourceLabel?: string
+}
+
+export function toolProvenance(data: unknown): ToolProvenance {
+  if (!data || typeof data !== 'object') return {}
+  const provider = (data as { provider?: unknown }).provider
+  if (!provider || typeof provider !== 'object') return {}
+  const value = provider as Record<string, unknown>
+  return {
+    providerId: typeof value.id === 'string' ? value.id : undefined,
+    providerKind: value.kind === 'demo' || value.kind === 'live' ? value.kind : undefined,
+    sourceLabel: typeof value.sourceLabel === 'string' ? value.sourceLabel : undefined,
+  }
+}
+
 export function evidenceFor(
   agentId: string,
   company: string,
   tool: string,
   description: string,
+  provenance: ToolProvenance = {},
 ): ResearchEvidence {
   const slug = company.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const providerId = provenance.providerId ?? 'research-provider'
   return {
-    id: `${agentId}:${tool}:${slug}`,
-    sourceName: 'MCP Research Tool (Demo Data)',
-    sourceType: 'demo',
+    id: `${agentId}:${providerId}:${tool}:${slug}`,
+    sourceName: provenance.sourceLabel ?? 'MCP Research Provider',
+    sourceType: provenance.providerKind === 'demo' ? 'demo' : 'mcp',
+    providerId: provenance.providerId,
+    providerKind: provenance.providerKind,
     tool,
-    ref: `${tool}:${slug}`,
+    ref: `${providerId}:${tool}:${slug}`,
     description,
   }
 }
