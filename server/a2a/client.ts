@@ -1,6 +1,7 @@
 import { Role, TaskState, type AgentCard, type Part, type Task } from '@a2a-js/sdk'
 import { ClientFactory, ClientFactoryOptions, DefaultAgentCardResolver, JsonRpcTransportFactory } from '@a2a-js/sdk/client'
 import type { SpecialistActivity, SpecialistResult } from '../orchestration/types.js'
+import { parseStructuredResearchResult } from '../orchestration/researchResultSchema.js'
 
 export class A2aClientError extends Error {
   readonly code: 'TIMEOUT' | 'DISCOVERY' | 'REMOTE_FAILED' | 'BAD_RESULT'
@@ -53,8 +54,9 @@ export async function dispatchSpecialistTask(
     }
 
     if (finalState !== TaskState.TASK_STATE_COMPLETED) throw new A2aClientError(`Specialist task ended in state ${finalState ?? 'unknown'}`, 'REMOTE_FAILED')
-    if (!result || typeof result !== 'object') throw new A2aClientError('Financial task has no structured artifact', 'BAD_RESULT')
-    return { taskId, result: result as SpecialistResult }
+    const validated = parseStructuredResearchResult(result)
+    if (!validated) throw new A2aClientError('Specialist task returned an invalid research-result/v2 artifact', 'BAD_RESULT')
+    return { taskId, result: validated }
   } catch (err) {
     if (err instanceof A2aClientError) throw err
     if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) throw new A2aClientError('A2A request timed out', 'TIMEOUT')
