@@ -75,5 +75,6 @@ export interface CompanySearchResult {
 
 export interface CompanyFinancialData {
   company: string
+  ticker?: string
   financial: FinancialSummary
 }
