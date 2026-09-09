@@ -15,6 +15,7 @@ export async function runTechnologyAgent(
   const activities: SpecialistActivity[] = []
   const report = (activity: SpecialistActivity) => { activities.push(activity); onActivity(activity) }
   const profiles: CompanyProfile[] = []
+  const provenanceByCompany = new Map<string, ToolProvenance>()
   const client = await createResearchClient()
 
   try {
@@ -23,7 +24,10 @@ export async function runTechnologyAgent(
       report({ stage: 'tool', message: `Calling MCP get_company_profile for ${company}` })
       const outcome = await client.callTool('get_company_profile', { company })
       const profile = (outcome.data as { profile?: CompanyProfile } | undefined)?.profile
-      if (profile) profiles.push(profile)
+      if (profile) {
+        profiles.push(profile)
+        provenanceByCompany.set(profile.name, toolProvenance(outcome.data))
+      }
     }
   } finally {
     await client.close().catch(() => {})
@@ -33,7 +37,7 @@ export async function runTechnologyAgent(
 
   const agentId = 'technology-product'
   const evidence = profiles.map((profile) =>
-    evidenceFor(agentId, profile.name, 'get_company_profile', 'Demo product, roadmap and technology data accessed through MCP.'),
+    evidenceFor(agentId, profile.name, 'get_company_profile', 'Product, roadmap and technology data accessed through MCP.', provenanceByCompany.get(profile.name)),
   )
   const evidenceByCompany = new Map(profiles.map((profile, index) => [profile.name, evidence[index].id]))
 
@@ -101,6 +105,6 @@ export async function runTechnologyAgent(
     risks: profileRisks(agentId, profiles, ['competition', 'supply-chain', 'execution', 'regulation'], evidenceByCompany),
     evidence,
     activities,
-    note: 'Technology research is based on Demo MCP business data.',
+    note: 'Technology research is based on the configured MCP research provider; provider metadata is attached to evidence.',
   })
 }
