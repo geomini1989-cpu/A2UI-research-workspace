@@ -11,7 +11,7 @@ type CardDefinition = Pick<AgentCard, 'name' | 'description' | 'skills'> & { id:
 
 function createAgentCard(baseUrl: string, definition: CardDefinition): AgentCard {
   return {
-    name: definition.name, description: definition.description, version: '1.0.0',
+    name: definition.name, description: definition.description, version: '1.1.0',
     provider: { organization: 'AI Research Workspace', url: baseUrl },
     supportedInterfaces: [{ url: `${baseUrl}${definition.endpoint}`, protocolBinding: 'JSONRPC', protocolVersion: '1.0', tenant: '' }],
     capabilities: { streaming: true, pushNotifications: false, extensions: [] },
@@ -28,7 +28,7 @@ export function createFinancialAgentCard(baseUrl: string): AgentCard {
   return createAgentCard(baseUrl, {
     id: 'financial', endpoint: FINANCIAL_A2A_PATH,
     name: 'Financial Research Agent',
-    description: 'Specialist for company fundamentals, financial metrics, comparison, valuation, and risk analysis using demo MCP research data.',
+    description: 'Specialist for company fundamentals, financial metrics, trends, valuation and risk analysis. Returns validated research-result/v2 JSON with evidence references.',
     skills: [
       skill('finance', 'company-analysis', 'Company Analysis', 'Analyze company fundamentals and business profile.', ['Analyze NVIDIA fundamentals']),
       skill('finance', 'financial-analysis', 'Financial Analysis', 'Analyze growth, profitability, and financial metrics.', ['Analyze NVIDIA growth and margins']),
@@ -42,7 +42,7 @@ export function createFinancialAgentCard(baseUrl: string): AgentCard {
 export function createMarketAgentCard(baseUrl: string): AgentCard {
   return createAgentCard(baseUrl, {
     id: 'market', endpoint: MARKET_A2A_PATH, name: 'Market & News Research Agent',
-    description: 'Specialist for market dynamics, company news, industry trends, competition, and market events using demo MCP data.',
+    description: 'Specialist for market dynamics, events and competitive intelligence. Returns validated research-result/v2 JSON with evidence references.',
     skills: [
       skill('market', 'market-research', 'Market Research', 'Research market dynamics and positioning.', ['Summarize NVIDIA market changes']),
       skill('market', 'news-research', 'News Research', 'Summarize company and industry news.', ['Summarize recent NVIDIA news']),
@@ -56,7 +56,7 @@ export function createMarketAgentCard(baseUrl: string): AgentCard {
 export function createTechnologyAgentCard(baseUrl: string): AgentCard {
   return createAgentCard(baseUrl, {
     id: 'technology', endpoint: TECHNOLOGY_A2A_PATH, name: 'Technology & Product Research Agent',
-    description: 'Specialist for technology roadmaps, product analysis, competitive moat, technical trends, and technology risk using demo MCP data.',
+    description: 'Specialist for technology roadmaps, products, competitive moat and technology risk. Returns validated research-result/v2 JSON with evidence references.',
     skills: [
       skill('technology', 'technology-analysis', 'Technology Analysis', 'Analyze technology capabilities and roadmaps.', ['Analyze NVIDIA technology moat']),
       skill('technology', 'product-analysis', 'Product Analysis', 'Analyze products and portfolio positioning.', ['Analyze NVIDIA products']),
