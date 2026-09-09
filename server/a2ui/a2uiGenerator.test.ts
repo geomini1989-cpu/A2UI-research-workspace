@@ -102,14 +102,14 @@ describe('sanitizeAgentMessage', () => {
     expect(out!.dropped).toEqual(expect.arrayContaining(['Row', 'Text']))
   })
 
-  it('strips model-owned presentation props and applies server chart defaults', () => {
+  it('enforces business contracts, strips unknown presentation props and compiles semantic renderer names', () => {
     const out = sanitizeAgentMessage({
       version: 'v0.9',
       updateComponents: {
         surfaceId: 's',
         components: [
           { component: 'MetricCard', id: 'm', title: '营收', value: '1', weight: 9, variant: 'hero', gap: 99 },
-          { component: 'Chart', id: 'c', title: '趋势', type: 'area', height: 999, xKey: 'period', yKey: 'value', data: [{ period: 'Q1', value: 1 }] },
+          { component: 'TrendChartCard', id: 'c', title: '趋势', type: 'area', height: 999, xKey: 'period', yKey: 'value', data: [{ period: 'Q1', value: 1 }] },
         ],
       },
     })
@@ -120,8 +120,26 @@ describe('sanitizeAgentMessage', () => {
     expect(metric.weight).toBeUndefined()
     expect(metric.variant).toBeUndefined()
     expect(metric.gap).toBeUndefined()
+    expect(chart.component).toBe('Chart')
     expect(chart.type).toBe('line')
     expect(chart.height).toBe(220)
+  })
+
+  it('drops a business component that violates its contract', () => {
+    const out = sanitizeAgentMessage({
+      version: 'v0.9',
+      updateComponents: {
+        surfaceId: 's',
+        components: [
+          { component: 'MetricCard', id: 'bad', title: '', value: '' },
+          { component: 'RiskCard', id: 'risk', level: 'CRITICAL', label: '非法等级' },
+        ],
+      },
+    })
+    expect(out).not.toBeNull()
+    const comps = (out!.message as A2uiMessage & { updateComponents: { components: unknown[] } }).updateComponents.components
+    expect(comps).toHaveLength(0)
+    expect(out!.dropped).toEqual(['MetricCard', 'RiskCard'])
   })
 })
 
@@ -141,10 +159,10 @@ describe('isAllowedComponent', () => {
 
 describe('isAgentAllowedComponent', () => {
   it('exposes business presentation components only', () => {
-    for (const component of ['StockOverview', 'MetricCard', 'ComparisonCard', 'Chart', 'RiskBadge', 'InsightList', 'ResearchSummary', 'FilterBar']) {
+    for (const component of ['StockOverviewCard', 'MetricCard', 'ComparisonCard', 'TrendChartCard', 'RiskCard', 'InsightCard', 'ResearchSummaryCard', 'FilterCard']) {
       expect(isAgentAllowedComponent(component)).toBe(true)
     }
-    for (const component of ['Text', 'Card', 'Row', 'Column', 'Button', 'Table']) {
+    for (const component of ['Text', 'Card', 'Row', 'Column', 'Button', 'Table', 'Chart', 'RiskBadge', 'StockOverview']) {
       expect(isAgentAllowedComponent(component)).toBe(false)
     }
   })
@@ -210,11 +228,11 @@ describe('buildA2uiMessages', () => {
         updateComponents: {
           surfaceId: 's',
           components: [
-            { component: 'RiskBadge', id: 'risk', level: 'HIGH', label: '风险' },
-            { component: 'Chart', id: 'chart', type: 'area', height: 999, data: [{ x: 'Q1', y: 1 }] },
+            { component: 'RiskCard', id: 'risk', level: 'HIGH', label: '风险' },
+            { component: 'TrendChartCard', id: 'chart', type: 'area', height: 999, data: [{ x: 'Q1', y: 1 }] },
             { component: 'MetricCard', id: 'metric-a', title: '营收', value: '1', weight: 9 },
             { component: 'MetricCard', id: 'metric-b', title: '毛利率', value: '2' },
-            { component: 'StockOverview', id: 'overview', company: 'NVIDIA' },
+            { component: 'StockOverviewCard', id: 'overview', company: 'NVIDIA' },
             { component: 'Text', id: 'model-title', variant: 'h2', text: '模型试图控制标题' },
             { component: 'Column', id: 'root', children: [{ id: 'risk' }, { id: 'chart' }] },
           ],
@@ -251,7 +269,7 @@ describe('buildA2uiMessages', () => {
     const out = buildA2uiMessages([
       { version: 'v0.9', createSurface: { surfaceId: 'research', catalogId: 'x', theme: {} } },
       { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'MetricCard', id: 'a', title: 'A', value: '1' }] } },
-      { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'RiskBadge', id: 'b', level: 'LOW', label: 'B' }] } },
+      { version: 'v0.9', updateComponents: { surfaceId: 'other', components: [{ component: 'RiskCard', id: 'b', level: 'LOW', label: 'B' }] } },
     ])
     const surfaces = out.messages
       .filter((m) => 'updateComponents' in m)
