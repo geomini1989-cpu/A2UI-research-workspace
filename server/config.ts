@@ -9,6 +9,8 @@ export interface AppConfig {
   deepseekBaseUrl: string
   /** Backend HTTP port. */
   port: number
+  /** Research data provider id selected at process startup. */
+  researchProviderId: string
   /** Public base URL advertised by the Financial Agent Card. Override to exercise A2A failure fallback. */
   financialAgentBaseUrl: string
   marketAgentBaseUrl: string
@@ -20,6 +22,7 @@ export const config: AppConfig = {
   deepseekModel: process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash',
   deepseekBaseUrl: process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
   port: Number(process.env.PORT || 3001),
+  researchProviderId: process.env.RESEARCH_PROVIDER || 'demo',
   financialAgentBaseUrl: process.env.FINANCIAL_AGENT_BASE_URL || `http://127.0.0.1:${Number(process.env.PORT || 3001)}`,
   marketAgentBaseUrl: process.env.MARKET_AGENT_BASE_URL || `http://127.0.0.1:${Number(process.env.PORT || 3001)}`,
   technologyAgentBaseUrl: process.env.TECHNOLOGY_AGENT_BASE_URL || `http://127.0.0.1:${Number(process.env.PORT || 3001)}`,
