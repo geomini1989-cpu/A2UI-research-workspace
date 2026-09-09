@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import { chatComplete, LlmError, type LlmMessage } from '../llm/deepseek.js'
 import { createResearchClient } from '../mcp/client.js'
-import type { CompanyProfile, FinancialSummary } from '../mcp/tools/researchTools.js'
+import type { CompanyProfile, FinancialSummary } from '../domain/research.js'
 import type { SpecialistActivity, StructuredResearchResult } from '../orchestration/types.js'
 import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
 import { companiesInRequest } from './specialistUtils.js'
