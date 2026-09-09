@@ -5,6 +5,11 @@ import type {
   FinancialSummary,
 } from '../domain/research.js'
 import {
+  assertCompanyFinancialData,
+  assertCompanyProfile,
+  assertCompanySearchResults,
+} from '../domain/researchSchema.js'
+import {
   ResearchProviderError,
   type ResearchDataProvider,
 } from './researchProvider.js'
@@ -627,34 +632,36 @@ export class DemoResearchProvider implements ResearchDataProvider {
     const q = normalizeLookup(query)
     if (!q) throw new ResearchProviderError('Missing search query', 'BAD_ARGS')
 
-    return Object.values(COMPANIES)
-      .filter(
-        (company) =>
-          company.profile.name.toLowerCase().includes(q) ||
-          company.profile.ticker.toLowerCase().includes(q) ||
-          company.profile.sector.toLowerCase().includes(q) ||
-          company.profile.industry.toLowerCase().includes(q),
-      )
-      .map((company) => ({
-        id: company.profile.id,
-        name: company.profile.name,
-        ticker: company.profile.ticker,
-        sector: company.profile.sector,
-        industry: company.profile.industry,
-      }))
+    return assertCompanySearchResults(
+      Object.values(COMPANIES)
+        .filter(
+          (company) =>
+            company.profile.name.toLowerCase().includes(q) ||
+            company.profile.ticker.toLowerCase().includes(q) ||
+            company.profile.sector.toLowerCase().includes(q) ||
+            company.profile.industry.toLowerCase().includes(q),
+        )
+        .map((company) => ({
+          id: company.profile.id,
+          name: company.profile.name,
+          ticker: company.profile.ticker,
+          sector: company.profile.sector,
+          industry: company.profile.industry,
+        })),
+    )
   }
 
   async getCompanyProfile(company: string): Promise<CompanyProfile> {
-    return structuredClone(findCompany(company).profile)
+    return assertCompanyProfile(structuredClone(findCompany(company).profile))
   }
 
   async getFinancialSummary(company: string): Promise<CompanyFinancialData> {
     const hit = findCompany(company)
-    return {
+    return assertCompanyFinancialData({
       company: hit.profile.name,
       ticker: hit.profile.ticker,
       financial: structuredClone(hit.financial),
-    }
+    })
   }
 }
 
