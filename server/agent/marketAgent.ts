@@ -1,5 +1,5 @@
 import { createResearchClient } from '../mcp/client.js'
-import type { CompanyProfile } from '../mcp/tools/researchTools.js'
+import type { CompanyProfile } from '../domain/research.js'
 import type { SpecialistActivity, StructuredResearchResult } from '../orchestration/types.js'
 import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
 import { companiesInRequest } from './specialistUtils.js'
