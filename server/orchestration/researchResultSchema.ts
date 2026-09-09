@@ -28,7 +28,7 @@ const Metric = z.object({
   period: z.string().max(60).optional(),
   unit: z.string().max(40).optional(),
   direction: z.enum(['up', 'down', 'flat', 'unknown']).optional(),
-  evidenceIds: z.array(z.string().min(1).max(160)).max(8),
+  evidenceIds: z.array(z.string().min(1).max(160)).min(1).max(8),
 })
 
 const Trend = z.object({
@@ -40,7 +40,7 @@ const Trend = z.object({
     period: z.string().min(1).max(60),
     value: z.number().finite(),
   })).min(1).max(64),
-  evidenceIds: z.array(z.string().min(1).max(160)).max(8),
+  evidenceIds: z.array(z.string().min(1).max(160)).min(1).max(8),
 })
 
 const Finding = z.object({
@@ -50,7 +50,7 @@ const Finding = z.object({
   detail: z.string().min(1).max(360),
   importance: Importance,
   sentiment: Sentiment.optional(),
-  evidenceIds: z.array(z.string().min(1).max(160)).max(8),
+  evidenceIds: z.array(z.string().min(1).max(160)).min(1).max(8),
 })
 
 const Risk = z.object({
@@ -59,7 +59,7 @@ const Risk = z.object({
   title: z.string().min(1).max(120),
   detail: z.string().min(1).max(360),
   severity: Importance,
-  evidenceIds: z.array(z.string().min(1).max(160)).max(8),
+  evidenceIds: z.array(z.string().min(1).max(160)).min(1).max(8),
 })
 
 const Activity = z.object({
@@ -88,13 +88,17 @@ export const StructuredResearchResultSchema = z.object({
   trends: z.array(Trend).max(30),
   findings: z.array(Finding).max(40),
   risks: z.array(Risk).max(40),
-  evidence: z.array(Evidence).min(1).max(80),
+  evidence: z.array(Evidence).max(80),
   activities: z.array(Activity).max(100),
   note: z.string().max(240).optional(),
   needUserInput: NeedUserInput.optional(),
 }).superRefine((value, ctx) => {
   const ids = value.evidence.map((item) => item.id)
   const uniqueIds = new Set(ids)
+  const substantiveCount = value.metrics.length + value.trends.length + value.findings.length + value.risks.length
+  if (substantiveCount > 0 && value.evidence.length === 0) {
+    ctx.addIssue({ code: 'custom', path: ['evidence'], message: 'Substantive research output requires evidence' })
+  }
   if (uniqueIds.size !== ids.length) {
     ctx.addIssue({ code: 'custom', path: ['evidence'], message: 'Evidence ids must be unique' })
   }
