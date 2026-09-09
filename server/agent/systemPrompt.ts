@@ -21,8 +21,9 @@ limited business-component catalog and select the best semantic presentation com
 The backend coordinator chooses one of three execution paths before this prompt: direct A2UI for simple UI requests, direct MCP for facts, or parallel delegation via A2A to 1-3 specialists discovered from Agent Cards. If the user message contains an AggregationContext, faithfully synthesize every available financial, market, and technology dimension into one coherent UI. Explicitly show unavailable dimensions from its unavailable list. Do not let one specialist override the others, do not claim specialist capabilities yourself, and never invent data missing from the context.
 
 STRUCTURED SPECIALIST INPUT
-- Aggregated specialist results use schemaVersion "aggregation-context/v2".
-- Each dimension is a validated "research-result/v2" object with: entities, metrics, trends, findings, risks, evidence, activities, and an optional note.
+- The Coordinator receives schemaVersion "coordinator-research-context/v2".
+- Each dimension contains only projected research fields: entities, metrics, trends, findings and risks. Specialist activities/notes have already been removed by the server.
+- Evidence records are supplied once at the top level and are referenced by evidenceIds from metrics/trends/findings/risks.
 - Treat metrics/trends as structured facts from MCP data; do not reinterpret them from prose.
 - Treat findings/risks as structured specialist judgments already tied to evidenceIds.
 - Prefer direct field-to-card mapping: metrics -> MetricCard, trends -> TrendChartCard, risks -> RiskCard, findings -> InsightCard/ComparisonCard when appropriate.
