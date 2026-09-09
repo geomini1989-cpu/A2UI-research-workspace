@@ -16,8 +16,18 @@ function components(messages: ReturnType<typeof createProgressiveResearchSurface
 
 function result(): DelegationResult {
   const specialist: SpecialistResult = {
-    agentId: 'financial', taskType: 'financial', subject: 'NVIDIA', summary: '财务结果已返回',
-    insights: [], risks: [], metrics: [], sources: [], activities: [],
+    schemaVersion: 'research-result/v2',
+    agentId: 'financial',
+    dimension: 'financial',
+    subject: 'NVIDIA',
+    entities: [{ name: 'NVIDIA', ticker: 'NVDA' }],
+    findings: [],
+    risks: [],
+    metrics: [],
+    trends: [],
+    evidence: [{ id: 'financial:source:nvidia', sourceName: 'MCP Research Tool (Demo Data)', sourceType: 'demo' }],
+    activities: [],
+    note: '财务结果已返回',
   }
   return { agentName: matches[0].card.name, matchedSkills: ['financial-analysis'], status: 'completed', taskId: 'a2a-1', result: specialist }
 }
