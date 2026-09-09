@@ -15,8 +15,8 @@ import { validateAndCompileBusinessComponent } from './businessComponentContract
 export const RESEARCH_CATALOG_ID = 'research.v0.9'
 
 /**
- * The exact component set the Agent is allowed to emit. This is the single
- * source of truth from the shared Component Catalog (basic + business).
+ * Full renderer allow-list used only for trusted server-generated A2UI.
+ * The Agent has a separate semantic business-card allow-list below.
  */
 export const ALLOWED_COMPONENTS = CATALOG_ALLOWED
 
@@ -72,9 +72,9 @@ export function sanitizeMessage(raw: unknown): SanitizedMessage | null {
 /**
  * Validate an A2UI message coming directly from the LLM.
  *
- * Unlike sanitizeMessage(), this boundary allows only business presentation
- * components. Renderer-only primitives and presentation/layout props are
- * removed before the message can enter the server-owned layout stage.
+ * Unlike sanitizeMessage(), this boundary accepts only semantic Agent business
+ * cards, validates their versioned business contracts, and compiles them to
+ * fixed renderer component names before server-owned layout is applied.
  */
 export function sanitizeAgentMessage(raw: unknown): SanitizedMessage | null {
   const parsed = A2uiMessageSchema.safeParse(raw)
