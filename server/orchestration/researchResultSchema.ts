@@ -9,6 +9,8 @@ const Evidence = z.object({
   id: z.string().min(1).max(160),
   sourceName: z.string().min(1).max(120),
   sourceType: z.enum(['mcp', 'demo']),
+  providerId: z.string().min(1).max(120).optional(),
+  providerKind: z.enum(['demo', 'live']).optional(),
   tool: z.string().max(80).optional(),
   ref: z.string().max(200).optional(),
   description: z.string().max(240).optional(),
