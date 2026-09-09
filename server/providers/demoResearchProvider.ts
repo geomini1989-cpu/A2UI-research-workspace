@@ -652,6 +652,7 @@ export class DemoResearchProvider implements ResearchDataProvider {
     const hit = findCompany(company)
     return {
       company: hit.profile.name,
+      ticker: hit.profile.ticker,
       financial: structuredClone(hit.financial),
     }
   }
