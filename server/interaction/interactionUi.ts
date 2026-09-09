@@ -1,5 +1,5 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
-import { buildA2uiMessages } from '../a2ui/a2uiGenerator.js'
+import { buildTrustedA2uiMessages } from '../a2ui/a2uiGenerator.js'
 import { RESEARCH_CATALOG_ID } from '../a2ui/a2uiSchema.js'
 import type { PendingInteraction, ResearchDimension } from './types.js'
 
@@ -16,7 +16,7 @@ function surface(interaction: PendingInteraction, components: Component[], data:
     component: 'Column', id: 'root', gap: 16,
     children: components.filter((item) => !nestedIds.has(String(item.id))).map((item) => ref(String(item.id))),
   }
-  return buildA2uiMessages([
+  return buildTrustedA2uiMessages([
     { version: 'v0.9', createSurface: { surfaceId: interaction.surfaceId, catalogId: RESEARCH_CATALOG_ID, theme: {} } },
     { version: 'v0.9', updateDataModel: { surfaceId: interaction.surfaceId, path: '/', value: data } },
     { version: 'v0.9', updateComponents: { surfaceId: interaction.surfaceId, components: [root, ...components] } },
