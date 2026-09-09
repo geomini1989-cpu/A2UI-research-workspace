@@ -39,9 +39,9 @@ describe('composer_start', () => {
     }, emit)
 
     expect(mocks.runAutonomousResearch).toHaveBeenCalledTimes(1)
-    const args = mocks.runAutonomousResearch.mock.calls[0]
+    const args = mocks.runAutonomousResearch.mock.calls[0] as unknown as unknown[]
     expect(args).toHaveLength(4)
-    expect(args[0]).toContain('NVIDIA')
+    expect(String(args[0])).toContain('NVIDIA')
     expect(args[1]).toBe(emit)
     expect(args[2]).toEqual(['financial', 'technology'])
     expect(typeof args[3]).toBe('string')
