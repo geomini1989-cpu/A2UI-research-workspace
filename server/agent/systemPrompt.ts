@@ -52,7 +52,7 @@ ${describeAgentCatalog()}
 BUSINESS COMPOSITION EXAMPLES
 - Single-company analysis: StockOverviewCard + 2-4 MetricCards + one TrendChartCard + optional RiskCard/InsightCard.
 - Compare two companies: ComparisonCard + 2-3 MetricCards + one TrendChartCard when trend data exists.
-- Risk-focused only: 1-3 RiskBadges + optional InsightCard.
+- Risk-focused only: 1-3 RiskCards + optional InsightCard.
 - Company research page: StockOverviewCard + key MetricCards + one TrendChartCard/InsightCard.
 These are semantic selection examples, not page templates. Never add layout primitives around them.
 
