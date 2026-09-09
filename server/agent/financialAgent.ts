@@ -85,23 +85,22 @@ export async function runFinancialAgent(
     ? profiles.map((profile) => ({ name: profile.name, ticker: profile.ticker }))
     : companies.map((name) => ({ name }))
 
-  const evidence = [...financials.keys()].map((company) =>
+  const financialEvidence = [...financials.keys()].map((company) =>
     evidenceFor(agentId, company, 'get_financial_summary', 'Demo financial summary and history accessed through MCP.'),
   )
-  const evidenceByCompany = new Map([...financials.keys()].map((company, index) => [company, evidence[index].id]))
+  const financialEvidenceByCompany = new Map([...financials.keys()].map((company, index) => [company, financialEvidence[index].id]))
+  const profileEvidenceItems = profiles.map((profile) =>
+    evidenceFor(agentId, profile.name, 'get_company_profile', 'Demo company profile and risk data accessed through MCP.'),
+  )
+  const profileEvidence = new Map(profiles.map((profile, index) => [profile.name, profileEvidenceItems[index].id]))
+  const evidence = [...financialEvidence, ...profileEvidenceItems]
 
   const metrics = [...financials.entries()].flatMap(([company, financial]) =>
-    financialMetrics(company, financial, evidenceByCompany.get(company)!),
+    financialMetrics(company, financial, financialEvidenceByCompany.get(company)!),
   )
   const trends = [...financials.entries()].flatMap(([company, financial]) =>
-    financialTrends(company, financial, evidenceByCompany.get(company)!),
+    financialTrends(company, financial, financialEvidenceByCompany.get(company)!),
   )
-
-  const profileEvidence = new Map<string, string>()
-  for (const profile of profiles) {
-    const existing = evidenceByCompany.get(profile.name)
-    if (existing) profileEvidence.set(profile.name, existing)
-  }
 
   let findings = metrics.slice(0, 4).map((metric, index) =>
     compactFinding(
@@ -131,7 +130,7 @@ export async function runFinancialAgent(
     const reasoning = parseReasoning(await chatComplete(messages))
     if (reasoning) {
       findings = reasoning.findings.flatMap((finding, index) => {
-        const evidenceId = evidenceByCompany.get(finding.company)
+        const evidenceId = financialEvidenceByCompany.get(finding.company)
         if (!evidenceId) return []
         return [compactFinding(
           agentId,
