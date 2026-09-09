@@ -4,6 +4,7 @@ import { config } from './config.js'
 import { chatRoutes } from './routes/chat.js'
 import { registerSpecialistA2aRoutes } from './a2a/server.js'
 import { registerAgent } from './registry/agentRegistry.js'
+import { getResearchProvider } from './providers/index.js'
 
 const app = Fastify({ logger: true })
 
@@ -21,7 +22,7 @@ async function main() {
   })
   for (const card of specialistCards) registerAgent(card)
 
-  app.get('/api/health', async () => ({ ok: true, model: config.deepseekModel }))
+  app.get('/api/health', async () => ({ ok: true, model: config.deepseekModel, researchProvider: getResearchProvider().metadata }))
 
   await app.listen({ port: config.port, host: '127.0.0.1' })
   app.log.info(`Research Agent backend listening on http://127.0.0.1:${config.port}`)
