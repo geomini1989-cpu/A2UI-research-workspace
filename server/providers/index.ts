@@ -1,3 +1,4 @@
+import { config } from '../config.js'
 import { demoResearchProvider } from './demoResearchProvider.js'
 import {
   ResearchProviderError,
@@ -13,7 +14,7 @@ export type ResearchProviderId = 'demo'
  * be added here later without changing MCP tools or specialist agents.
  */
 export function createResearchProvider(
-  providerId = process.env.RESEARCH_PROVIDER ?? 'demo',
+  providerId = config.researchProviderId,
 ): ResearchDataProvider {
   if (providerId === 'demo') return demoResearchProvider
   throw new ResearchProviderError(
