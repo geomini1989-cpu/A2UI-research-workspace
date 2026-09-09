@@ -9,6 +9,7 @@
  */
 import { A2uiMessageSchema, type A2uiMessage } from '@a2ui/web_core/v0_9'
 import { ALLOWED_COMPONENTS as CATALOG_ALLOWED, AGENT_ALLOWED_COMPONENTS } from '../catalog/componentCatalog.js'
+import { validateAndCompileBusinessComponent } from './businessComponentContract.js'
 
 /** Catalog the frontend registered against its A2UI MessageProcessor. */
 export const RESEARCH_CATALOG_ID = 'research.v0.9'
@@ -25,15 +26,6 @@ export function isAllowedComponent(name: unknown): boolean {
 
 export function isAgentAllowedComponent(name: unknown): boolean {
   return typeof name === 'string' && (AGENT_ALLOWED_COMPONENTS as readonly string[]).includes(name)
-}
-
-const PRESENTATION_PROPS = new Set([
-  'weight', 'gap', 'align', 'justify', 'variant', 'height', 'type',
-  'width', 'size', 'color', 'style', 'className', 'children', 'child',
-])
-
-function stripAgentPresentationProps(component: Record<string, unknown>): Record<string, unknown> {
-  return Object.fromEntries(Object.entries(component).filter(([key]) => key === 'component' || key === 'id' || !PRESENTATION_PROPS.has(key)))
 }
 
 /** Remove a ```json … ``` code fence so the payload can be parsed safely. */
@@ -102,14 +94,12 @@ export function sanitizeAgentMessage(raw: unknown): SanitizedMessage | null {
         dropped.push(String(component.component))
         return []
       }
-      const semantic = stripAgentPresentationProps(component as Record<string, unknown>)
-      // Presentation defaults are server-owned. A model may choose that a trend
-      // deserves a Chart, but it cannot choose chart type/height/styling.
-      if (semantic.component === 'Chart') {
-        semantic.type = 'line'
-        semantic.height = 220
+      const compiled = validateAndCompileBusinessComponent(component as Record<string, unknown>)
+      if (!compiled) {
+        dropped.push(String(component.component))
+        return []
       }
-      return [semantic as typeof component]
+      return [compiled.component as typeof component]
     })
   }
 
