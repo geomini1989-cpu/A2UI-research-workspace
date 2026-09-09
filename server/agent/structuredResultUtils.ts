@@ -1,4 +1,4 @@
-import type { CompanyProfile, FinancialSummary } from '../mcp/tools/researchTools.js'
+import type { CompanyProfile, FinancialSummary } from '../domain/research.js'
 import type {
   ResearchEvidence,
   ResearchFinding,
