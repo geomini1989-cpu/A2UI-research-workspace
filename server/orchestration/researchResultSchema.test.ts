@@ -77,6 +77,27 @@ describe('StructuredResearchResultSchema', () => {
     expect(parseStructuredResearchResult(result)).toBeNull()
   })
 
+
+  it('allows a need-input-only result before evidence exists', () => {
+    expect(parseStructuredResearchResult({
+      schemaVersion: 'research-result/v2',
+      agentId: 'financial',
+      dimension: 'financial',
+      subject: 'NVIDIA comparison',
+      entities: [{ name: 'NVIDIA', ticker: 'NVDA' }],
+      metrics: [],
+      trends: [],
+      findings: [],
+      risks: [],
+      evidence: [],
+      activities: [],
+      needUserInput: {
+        reason: 'Need comparison company',
+        fields: [{ id: 'companyB', label: 'Company B', type: 'text', required: true }],
+      },
+    })).not.toBeNull()
+  })
+
   it('rejects legacy prose-first specialist artifacts', () => {
     expect(parseStructuredResearchResult({
       agentId: 'financial',
