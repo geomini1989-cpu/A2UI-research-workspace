@@ -242,7 +242,7 @@ describe('buildA2uiMessages', () => {
 
     const components = out.messages.flatMap((m) => 'updateComponents' in m ? m.updateComponents.components : []) as Record<string, unknown>[]
     expect(components.some((component) => component.id === 'model-title')).toBe(false)
-    const metricRow = components.find((component) => component.id === '__layout-metrics') as { children: { id: string }[] }
+    const metricRow = components.find((component) => component.id === '__layout-metrics') as { component: string; children: { id: string }[] }
     expect(metricRow.component).toBe('Row')
     expect(metricRow.children.map((child) => child.id)).toEqual(['metric-a', 'metric-b'])
     const root = components.find((component) => component.id === 'root') as { children: { id: string }[] }
