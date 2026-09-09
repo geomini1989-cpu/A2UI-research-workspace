@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import { runFinancialSpecialist } from '../agent/financialAgent.js'
 import { runMarketAgent } from '../agent/marketAgent.js'
 import { runTechnologyAgent } from '../agent/technologyAgent.js'
-import type { SpecialistActivity, SpecialistResult } from '../orchestration/types.js'
+import type { ResearchDimension, SpecialistActivity, SpecialistResult } from '../orchestration/types.js'
 import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
 import { AGENT_CARD_PATH, FINANCIAL_A2A_PATH, MARKET_AGENT_CARD_PATH, MARKET_A2A_PATH, TECHNOLOGY_AGENT_CARD_PATH, TECHNOLOGY_A2A_PATH, createFinancialAgentCard, createMarketAgentCard, createTechnologyAgentCard } from './agentCard.js'
 
@@ -18,8 +18,13 @@ type SpecialistRunner = (request: string, onActivity: (activity: SpecialistActiv
 
 class SpecialistAgentExecutor implements AgentExecutor {
   private readonly agentName: string
+  private readonly dimension: ResearchDimension
   private readonly runner: SpecialistRunner
-  constructor(agentName: string, runner: SpecialistRunner) { this.agentName = agentName; this.runner = runner }
+  constructor(agentName: string, dimension: ResearchDimension, runner: SpecialistRunner) {
+    this.agentName = agentName
+    this.dimension = dimension
+    this.runner = runner
+  }
   async execute(context: RequestContext, bus: ExecutionEventBus): Promise<void> {
     const { taskId, contextId } = context
     console.info(`[A2A] ${this.agentName} received task ${taskId}`)
@@ -29,6 +34,7 @@ class SpecialistAgentExecutor implements AgentExecutor {
     try {
       const request = context.userMessage.parts.map(partText).filter(Boolean).join('\n')
       const result = assertStructuredResearchResult(await this.runner(request, publishActivity))
+      if (result.dimension !== this.dimension) throw new Error(`Specialist returned dimension ${result.dimension}; expected ${this.dimension}`)
       bus.publish(AgentEvent.artifactUpdate({ taskId, contextId, append: false, lastChunk: true, metadata: undefined, artifact: { artifactId: crypto.randomUUID(), name: `${result.agentId}-research-result`, description: 'Validated structured research-result/v2 artifact; contains no UI or executable code.', parts: [{ content: { $case: 'data', value: result }, metadata: undefined, filename: '', mediaType: 'application/json' }], metadata: { schema: 'research-result/v2' }, extensions: [] } }))
       bus.publish(AgentEvent.statusUpdate({ taskId, contextId, metadata: undefined, status: { state: TaskState.TASK_STATE_COMPLETED, timestamp: new Date().toISOString(), message: statusMessage(contextId, taskId, `${this.agentName} research completed`) } }))
       console.info(`[A2A] task ${taskId} completed`)
@@ -40,12 +46,14 @@ class SpecialistAgentExecutor implements AgentExecutor {
   async cancelTask(_taskId: string, bus: ExecutionEventBus): Promise<void> { bus.finished() }
 }
 
-function createSpecialistA2aHandler(card: AgentCard, runner: SpecialistRunner) {
-  const requestHandler = new DefaultRequestHandler(card, new InMemoryTaskStore(), new SpecialistAgentExecutor(card.name, runner))
+function createSpecialistA2aHandler(card: AgentCard, dimension: ResearchDimension, runner: SpecialistRunner) {
+  const requestHandler = new DefaultRequestHandler(card, new InMemoryTaskStore(), new SpecialistAgentExecutor(card.name, dimension, runner))
   return { card, transport: new JsonRpcTransportHandler(requestHandler) }
 }
 
-export function createFinancialA2aHandler(baseUrl: string) { return createSpecialistA2aHandler(createFinancialAgentCard(baseUrl), runFinancialSpecialist) }
+export function createFinancialA2aHandler(baseUrl: string) {
+  return createSpecialistA2aHandler(createFinancialAgentCard(baseUrl), 'financial', runFinancialSpecialist)
+}
 
 export async function registerFinancialA2aRoutes(app: FastifyInstance, baseUrl: string) {
   const { card, transport } = createFinancialA2aHandler(baseUrl)
@@ -82,12 +90,12 @@ export interface SpecialistBaseUrls { financial: string; market: string; technol
 
 export async function registerSpecialistA2aRoutes(app: FastifyInstance, baseUrls: SpecialistBaseUrls): Promise<AgentCard[]> {
   const definitions = [
-    { card: createFinancialAgentCard(baseUrls.financial), cardPath: AGENT_CARD_PATH, a2aPath: FINANCIAL_A2A_PATH, runner: runFinancialSpecialist },
-    { card: createMarketAgentCard(baseUrls.market), cardPath: MARKET_AGENT_CARD_PATH, a2aPath: MARKET_A2A_PATH, runner: runMarketAgent },
-    { card: createTechnologyAgentCard(baseUrls.technology), cardPath: TECHNOLOGY_AGENT_CARD_PATH, a2aPath: TECHNOLOGY_A2A_PATH, runner: runTechnologyAgent },
+    { card: createFinancialAgentCard(baseUrls.financial), dimension: 'financial' as const, cardPath: AGENT_CARD_PATH, a2aPath: FINANCIAL_A2A_PATH, runner: runFinancialSpecialist },
+    { card: createMarketAgentCard(baseUrls.market), dimension: 'market' as const, cardPath: MARKET_AGENT_CARD_PATH, a2aPath: MARKET_A2A_PATH, runner: runMarketAgent },
+    { card: createTechnologyAgentCard(baseUrls.technology), dimension: 'technology' as const, cardPath: TECHNOLOGY_AGENT_CARD_PATH, a2aPath: TECHNOLOGY_A2A_PATH, runner: runTechnologyAgent },
   ]
   for (const definition of definitions) {
-    const { transport } = createSpecialistA2aHandler(definition.card, definition.runner)
+    const { transport } = createSpecialistA2aHandler(definition.card, definition.dimension, definition.runner)
     registerCardRoute(app, definition.cardPath, definition.card)
     registerTransportRoute(app, definition.a2aPath, transport)
   }
