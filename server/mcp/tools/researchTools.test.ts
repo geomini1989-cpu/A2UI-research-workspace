@@ -1,15 +1,76 @@
 import { describe, it, expect } from 'vitest'
 import {
   executeResearchTool,
+  executeResearchToolWithProvider,
   ResearchToolError,
   RESEARCH_TOOL_NAMES,
   RESEARCH_SOURCE_LABEL,
   type CompanyProfile,
 } from './researchTools.js'
+import type { ResearchDataProvider } from '../../providers/researchProvider.js'
 
 describe('RESEARCH_TOOL_NAMES (allow-list)', () => {
   it('exposes exactly the three allowed tools', () => {
     expect(RESEARCH_TOOL_NAMES).toEqual(['search_company', 'get_company_profile', 'get_financial_summary'])
+  })
+})
+
+describe('provider adapter seam', () => {
+  it('formats MCP output from an injected provider without knowing its implementation', async () => {
+    const fake: ResearchDataProvider = {
+      metadata: {
+        id: 'fake-live',
+        name: 'Fake Live Provider',
+        kind: 'live',
+        sourceLabel: 'Fake Live Source',
+      },
+      async searchCompanies() {
+        return [{ id: 'acme', name: 'Acme', ticker: 'ACME', sector: 'Tech', industry: 'Software' }]
+      },
+      async getCompanyProfile() {
+        return {
+          id: 'acme',
+          name: 'Acme',
+          ticker: 'ACME',
+          sector: 'Tech',
+          industry: 'Software',
+          headquarters: 'Test',
+          founded: 2000,
+          employees: '100',
+          description: 'Test profile',
+          highlights: [],
+          market: { position: 'Test', sentiment: 'neutral', competitors: [], marketShare: [], geographies: [], recentEvents: [] },
+          technology: { products: [], roadmap: [], strengths: [], ecosystem: [], rdIntensity: 'Medium', moat: 'Test' },
+          risks: [],
+        }
+      },
+      async getFinancialSummary() {
+        return {
+          company: 'Acme',
+          ticker: 'ACME',
+          financial: {
+            currency: 'USD',
+            fiscalYear: 'FY',
+            revenue: [],
+            growth: [],
+            profitability: [],
+            valuation: [],
+            history: [],
+            cashFlow: [],
+            capitalAllocation: [],
+            comment: 'live',
+          },
+        }
+      },
+    }
+
+    const out = await executeResearchToolWithProvider('search_company', { query: 'acme' }, fake)
+    expect(out.data).toMatchObject({
+      source: 'Fake Live Source',
+      provider: { id: 'fake-live', kind: 'live' },
+      results: [{ ticker: 'ACME' }],
+    })
+    expect(out.text).toContain('Fake Live Source')
   })
 })
 
