@@ -2,18 +2,17 @@
  * Component Catalog 是 A2UI 组件集合的唯一事实来源。
  * Component Catalog is the single source of truth for the A2UI component set.
  *
- * 分为两层：基础组件（布局 + 通用积木）与业务组件（Agent 选择的研究领域组合组件）。
- * It has two layers: basic components (layout + generic building blocks) and
- * business components (research-domain composites selected by the Agent).
+ * Renderer Catalog 分为基础组件与业务渲染组件；Agent 另有独立的语义业务卡片 Catalog。
+ * The renderer catalog contains primitives plus business renderers; the Agent
+ * uses a separate semantic business-card catalog compiled to renderer names.
  *
  * 本文件仅包含纯数据，不包含 React、DOM 或 JSX；服务端 Agent 与客户端渲染注册表共同读取它。
  * This file contains pure data only—no React, DOM, or JSX—and is shared by the
  * server Agent and the client render registry.
  *
- * 单一列表可以防止 Prompt、服务端 sanitizer 和客户端 catalog 发生漂移；Agent 只看到
- * `name`、`description` 与 `props`，不会接触 JSX/React 内部实现。
- * One shared list prevents prompt, sanitizer, and client catalog drift; the
- * Agent sees only `name`, `description`, and `props`, never JSX/React internals.
+ * Renderer 能力与 Agent 能力分别维护显式映射，避免“客户端能渲染”被误解为“模型有权生成”。
+ * Renderer capability and Agent capability are explicitly mapped so a client
+ * rendering capability never implicitly becomes a model generation permission.
  */
 
 export type CatalogCategory = 'basic' | 'business'
