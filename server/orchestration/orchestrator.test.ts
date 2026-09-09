@@ -20,8 +20,20 @@ describe('six dynamic selection scenarios', () => {
   it('selects all three specialists for comprehensive analysis', () => expect(selected('全面分析 NVIDIA，包含财务、市场和技术')).toEqual(expect.arrayContaining(['Financial Research Agent', 'Market & News Research Agent', 'Technology & Product Research Agent'])))
 })
 
-function result(taskType: SpecialistResult['taskType']): SpecialistResult {
-  return { agentId: taskType, taskType, subject: 'NVIDIA', summary: `${taskType} summary`, insights: [], risks: [], metrics: [], sources: [], activities: [] }
+function result(dimension: SpecialistResult['dimension']): SpecialistResult {
+  return {
+    schemaVersion: 'research-result/v2',
+    agentId: dimension,
+    dimension,
+    subject: 'NVIDIA',
+    entities: [{ name: 'NVIDIA', ticker: 'NVDA' }],
+    findings: [],
+    risks: [],
+    metrics: [],
+    trends: [],
+    evidence: [{ id: `${dimension}:source:nvidia`, sourceName: 'MCP Research Tool (Demo Data)', sourceType: 'demo' }],
+    activities: [],
+  }
 }
 
 describe('parallel delegation, partial failure, and aggregation', () => {
@@ -32,8 +44,8 @@ describe('parallel delegation, partial failure, and aggregation', () => {
     const execution = executeDelegationPlan(plan, '全面分析 NVIDIA', () => {}, async (card) => {
       started.push(card.name)
       await new Promise<void>((resolve) => releases.set(card.name, resolve))
-      const taskType = card.name.startsWith('Financial') ? 'financial' : card.name.startsWith('Market') ? 'market' : 'technology'
-      return { taskId: card.name, result: result(taskType) }
+      const dimension = card.name.startsWith('Financial') ? 'financial' : card.name.startsWith('Market') ? 'market' : 'technology'
+      return { taskId: card.name, result: result(dimension) }
     })
     await Promise.resolve()
     expect(started).toHaveLength(3)
@@ -45,8 +57,8 @@ describe('parallel delegation, partial failure, and aggregation', () => {
     const plan = createDelegationPlan(analyzeTaskRequirements('全面分析 NVIDIA'))
     const results = await executeDelegationPlan(plan, '全面分析 NVIDIA', () => {}, async (card) => {
       if (card.name.startsWith('Market')) throw new Error('Market endpoint unavailable')
-      const taskType = card.name.startsWith('Financial') ? 'financial' : 'technology'
-      return { taskId: card.name, result: result(taskType) }
+      const dimension = card.name.startsWith('Financial') ? 'financial' : 'technology'
+      return { taskId: card.name, result: result(dimension) }
     })
     const aggregated = aggregateSpecialistResults(results, plan, 'NVIDIA')
     expect(aggregated.completedAgents).toHaveLength(2)
@@ -54,6 +66,8 @@ describe('parallel delegation, partial failure, and aggregation', () => {
     expect(aggregated.dimensions.technology).toBeDefined()
     expect(aggregated.dimensions.market).toBeUndefined()
     expect(aggregated.unavailable[0]?.agentName).toContain('Market')
+    expect(aggregated.schemaVersion).toBe('aggregation-context/v2')
+    expect(aggregated.evidence).toHaveLength(2)
   })
 
   it('forwards live specialist activity and settles each result independently', async () => {
@@ -66,8 +80,8 @@ describe('parallel delegation, partial failure, and aggregation', () => {
       (event) => { if (event.stage === 'tool_call') activities.push(event.actor) },
       async (card, _request, _timeout, onActivity) => {
         onActivity?.({ stage: 'tool', message: `MCP for ${card.name}` })
-        const taskType = card.name.startsWith('Financial') ? 'financial' : card.name.startsWith('Market') ? 'market' : 'technology'
-        return { taskId: card.name, result: result(taskType) }
+        const dimension = card.name.startsWith('Financial') ? 'financial' : card.name.startsWith('Market') ? 'market' : 'technology'
+        return { taskId: card.name, result: result(dimension) }
       },
       30_000,
       (item) => settled.push(item.agentName),
