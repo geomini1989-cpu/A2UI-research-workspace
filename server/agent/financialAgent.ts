@@ -12,6 +12,8 @@ import {
   financialMetrics,
   financialTrends,
   profileRisks,
+  toolProvenance,
+  type ToolProvenance,
 } from './structuredResultUtils.js'
 
 export type FinancialActivity = SpecialistActivity
@@ -28,7 +30,7 @@ const FinancialReasoningSchema = z.object({
 })
 
 const FINANCIAL_SYSTEM_PROMPT = `You are the Financial Research Agent.
-Reason only over the supplied MCP demo data. Return one strict JSON object:
+Reason only over the supplied MCP provider data. Return one strict JSON object:
 {"findings":[{"category":"...","title":"...","detail":"...","importance":"low|medium|high","sentiment":"positive|neutral|negative|mixed","company":"..."}]}
 Do not return metrics, UI, A2UI, React, markdown, executable code, or unsupported facts.
 Keep findings concise and evidence-grounded. The server builds authoritative metrics, trends, risks and evidence from MCP data.`
@@ -59,6 +61,8 @@ export async function runFinancialAgent(
   const report = (activity: FinancialActivity) => { activities.push(activity); onActivity(activity) }
   const profiles: CompanyProfile[] = []
   const financials = new Map<string, FinancialSummary>()
+  const profileProvenance = new Map<string, ToolProvenance>()
+  const financialProvenance = new Map<string, ToolProvenance>()
   const client = await createResearchClient()
 
   try {
@@ -67,12 +71,19 @@ export async function runFinancialAgent(
       report({ stage: 'tool', message: `Calling MCP get_company_profile for ${company}` })
       const profileOutcome = await client.callTool('get_company_profile', { company })
       const profile = (profileOutcome.data as { profile?: CompanyProfile } | undefined)?.profile
-      if (profile) profiles.push(profile)
+      if (profile) {
+        profiles.push(profile)
+        profileProvenance.set(profile.name, toolProvenance(profileOutcome.data))
+      }
 
       report({ stage: 'tool', message: `Calling MCP get_financial_summary for ${company}` })
       const financialOutcome = await client.callTool('get_financial_summary', { company })
       const data = financialOutcome.data as { company?: string; financial?: FinancialSummary } | undefined
-      if (data?.financial) financials.set(data.company ?? profile?.name ?? company, data.financial)
+      if (data?.financial) {
+        const companyName = data.company ?? profile?.name ?? company
+        financials.set(companyName, data.financial)
+        financialProvenance.set(companyName, toolProvenance(financialOutcome.data))
+      }
     }
   } finally {
     await client.close().catch(() => {})
@@ -86,11 +97,11 @@ export async function runFinancialAgent(
     : companies.map((name) => ({ name }))
 
   const financialEvidence = [...financials.keys()].map((company) =>
-    evidenceFor(agentId, company, 'get_financial_summary', 'Demo financial summary and history accessed through MCP.'),
+    evidenceFor(agentId, company, 'get_financial_summary', 'Financial summary and history accessed through MCP.', financialProvenance.get(company)),
   )
   const financialEvidenceByCompany = new Map([...financials.keys()].map((company, index) => [company, financialEvidence[index].id]))
   const profileEvidenceItems = profiles.map((profile) =>
-    evidenceFor(agentId, profile.name, 'get_company_profile', 'Demo company profile and risk data accessed through MCP.'),
+    evidenceFor(agentId, profile.name, 'get_company_profile', 'Company profile and risk data accessed through MCP.', profileProvenance.get(profile.name)),
   )
   const profileEvidence = new Map(profiles.map((profile, index) => [profile.name, profileEvidenceItems[index].id]))
   const evidence = [...financialEvidence, ...profileEvidenceItems]
@@ -169,7 +180,7 @@ export async function runFinancialAgent(
     ),
     evidence,
     activities,
-    note: 'Financial metrics are authoritative MCP demo values; LLM reasoning is optional, structured and contract-validated.',
+    note: 'Financial metrics are authoritative MCP provider values; LLM reasoning is optional, structured and contract-validated.',
   }
 
   return assertStructuredResearchResult(result)
