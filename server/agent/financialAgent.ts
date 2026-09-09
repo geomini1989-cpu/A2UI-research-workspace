@@ -129,7 +129,7 @@ export async function runFinancialAgent(
   try {
     const reasoning = parseReasoning(await chatComplete(messages))
     if (reasoning && reasoning.findings.length > 0) {
-      findings = reasoning.findings.flatMap((finding, index) => {
+      const reasonedFindings = reasoning.findings.flatMap((finding, index) => {
         const evidenceId = financialEvidenceByCompany.get(finding.company)
         if (!evidenceId) return []
         return [compactFinding(
@@ -144,6 +144,7 @@ export async function runFinancialAgent(
           finding.sentiment,
         )]
       })
+      if (reasonedFindings.length > 0) findings = reasonedFindings
     }
   } catch (error) {
     if (!(error instanceof LlmError) || error.code !== 'NO_API_KEY') {
