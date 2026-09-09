@@ -164,14 +164,8 @@ export async function executeResearchToolWithProvider(
 
     if (name === 'get_financial_summary') {
       const result = await provider.getFinancialSummary(String(argObj.company ?? ''))
-      let ticker: string | undefined
-      try {
-        ticker = (await provider.getCompanyProfile(result.company)).ticker
-      } catch {
-        // Profile lookup is presentation-only here; the financial payload remains valid.
-      }
       return {
-        text: financialText(metadata.sourceLabel, result.company, ticker, result.financial),
+        text: financialText(metadata.sourceLabel, result.company, result.ticker, result.financial),
         data: {
           source: metadata.sourceLabel,
           provider: metadata,
