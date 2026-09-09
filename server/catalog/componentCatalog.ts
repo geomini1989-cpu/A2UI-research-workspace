@@ -230,7 +230,7 @@ export const BUSINESS_COMPONENT_NAMES = COMPONENT_CATALOG.filter((c) => c.catego
 /** 所有组件名；服务端 allow-list 由此派生。 / Every component name; the server allow-list derives from this. */
 export const ALLOWED_COMPONENTS = COMPONENT_CATALOG.map((c) => c.name)
 
-/** 面向 Agent 的轻量机器可读元数据（无 React）。 / Lightweight Agent-facing metadata (no React). */
+/** Renderer 目录的轻量机器可读元数据（无 React）。 / Lightweight renderer-catalog metadata (no React). */
 export const CATALOG_METADATA = COMPONENT_CATALOG.map((spec) => ({
   name: spec.name,
   description: spec.description,
@@ -354,13 +354,13 @@ export function describeAgentCatalog(): string {
 }
 
 /**
- * 将目录渲染成 Agent 可读取的紧凑 Prompt 区块，列出允许的组件名，并提供业务组件摘要与属性。
- * Render the catalog into a compact Agent-readable prompt block with allowed names plus business summaries and props.
+ * Renderer Catalog 的诊断描述。不要把它用作 Agent Prompt；模型只能读取 describeAgentCatalog()。
+ * Diagnostic description of the renderer catalog. Never use this as an Agent prompt; models must use describeAgentCatalog().
  */
 export function describeCatalog(): string {
   const nameLine = (list: string[]) => list.join(', ')
   const lines: string[] = []
-  lines.push('COMPONENT CATALOG (the ONLY components you may emit — never invent one):')
+  lines.push('RENDERER COMPONENT CATALOG (trusted server/runtime capabilities; NOT Agent permissions):')
   lines.push(`- Basic: ${nameLine(BASIC_COMPONENT_NAMES)}`)
   lines.push(`- Business: ${nameLine(BUSINESS_COMPONENT_NAMES)}`)
   lines.push('')
