@@ -3,7 +3,7 @@ import type { CompanyProfile } from '../domain/research.js'
 import type { SpecialistActivity, StructuredResearchResult } from '../orchestration/types.js'
 import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
 import { companiesInRequest } from './specialistUtils.js'
-import { compactFinding, evidenceFor, profileEntities, profileRisks } from './structuredResultUtils.js'
+import { compactFinding, evidenceFor, profileEntities, profileRisks, toolProvenance, type ToolProvenance } from './structuredResultUtils.js'
 
 export async function runTechnologyAgent(
   request: string,
