@@ -6,6 +6,9 @@ import {
   ALLOWED_COMPONENTS,
   CATALOG_METADATA,
   describeCatalog,
+  describeAgentCatalog,
+  AGENT_COMPONENT_NAMES,
+  AGENT_TO_RENDERER_COMPONENT,
 } from './componentCatalog.js'
 import { ALLOWED_COMPONENTS as SERVER_ALLOWED, isAllowedComponent } from '../a2ui/a2uiSchema.js'
 
@@ -51,12 +54,39 @@ describe('COMPONENT_CATALOG (single source of truth)', () => {
     expect(chart.props.filters).toContain('switches yKey')
   })
 
+
+  it('keeps Agent semantic capabilities separate from renderer component names', () => {
+    expect(AGENT_COMPONENT_NAMES).toEqual([
+      'StockOverviewCard',
+      'MetricCard',
+      'ComparisonCard',
+      'TrendChartCard',
+      'RiskCard',
+      'InsightCard',
+      'ResearchSummaryCard',
+      'FilterCard',
+    ])
+    expect(AGENT_TO_RENDERER_COMPONENT.TrendChartCard).toBe('Chart')
+    expect(AGENT_TO_RENDERER_COMPONENT.RiskCard).toBe('RiskBadge')
+    expect(AGENT_COMPONENT_NAMES).not.toContain('Row')
+    expect(AGENT_COMPONENT_NAMES).not.toContain('Column')
+    expect(AGENT_COMPONENT_NAMES).not.toContain('Text')
+  })
+
+  it('generates an Agent prompt catalog containing semantic cards only', () => {
+    const text = describeAgentCatalog()
+    expect(text).toContain('TrendChartCard')
+    expect(text).toContain('RiskCard')
+    expect(text).not.toContain('- Row')
+    expect(text).not.toContain('- Column')
+    expect(text).not.toContain('- Text')
+  })
   it('generates a prompt block that names the business components', () => {
     const text = describeCatalog()
     expect(text).toContain('MetricCard')
     expect(text).toContain('ComparisonCard')
     expect(text).toContain('RiskBadge')
-    expect(text).toContain('COMPONENT CATALOG')
+    expect(text).toContain('RENDERER COMPONENT CATALOG')
   })
 })
 
