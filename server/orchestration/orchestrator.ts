@@ -93,13 +93,15 @@ export async function executeDelegationPlan(
 export function aggregateSpecialistResults(results: DelegationResult[], plan: DelegationPlan, fallbackSubject = 'Research subject'): AggregationContext {
   const completed = results.filter((item): item is DelegationResult & { result: SpecialistResult } => item.status === 'completed' && Boolean(item.result))
   const dimensions: AggregationContext['dimensions'] = {}
-  for (const item of completed) dimensions[item.result.taskType] = item.result
+  for (const item of completed) dimensions[item.result.dimension] = item.result
   return {
     subject: completed[0]?.result.subject || fallbackSubject,
     dimensions,
     unavailable: results.filter((item) => item.status === 'failed').map((item) => ({ agentName: item.agentName, skills: item.matchedSkills, reason: item.error ?? 'Unavailable' })),
     unmatchedSkills: plan.unmatchedSkills,
     completedAgents: completed.map((item) => item.agentName),
+    schemaVersion: 'aggregation-context/v2',
+    evidence: [...new Map(completed.flatMap((item) => item.result.evidence).map((item) => [item.id, item])).values()],
   }
 }
 
