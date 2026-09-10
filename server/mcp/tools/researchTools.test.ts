@@ -98,7 +98,7 @@ describe('executeResearchTool', () => {
     expect(fin.revenue.length).toBeGreaterThan(0)
     expect(fin.history).toHaveLength(8)
     expect(fin.cashFlow.length).toBeGreaterThan(0)
-    expect(res.text).toContain('Quarterly history')
+    expect(res.text).toContain('Historical reporting periods')
   })
 
   it('returns market, technology and risk dimensions from the company profile', async () => {

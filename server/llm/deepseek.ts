@@ -1,3 +1,4 @@
+import { requestSignal, recordUsage, runContext } from '../runtime/context.js'
 import { config } from '../config.js'
 
 export interface LlmToolCall {
@@ -49,6 +50,7 @@ export class LlmError extends Error {
 }
 
 interface ChatResponse {
+  usage?: { prompt_tokens?: number; completion_tokens?: number }
   choices?: {
     finish_reason?: string | null
     message?: {
@@ -60,6 +62,7 @@ interface ChatResponse {
 }
 
 interface ChatStreamResponse {
+  usage?: { prompt_tokens?: number; completion_tokens?: number }
   choices?: {
     finish_reason?: string | null
     delta?: {
@@ -120,8 +123,8 @@ async function requestJson(body: Record<string, unknown>): Promise<ChatResponse>
     throw new LlmError('Missing DEEPSEEK_API_KEY in the environment', 'NO_API_KEY')
   }
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const signal = requestSignal(REQUEST_TIMEOUT_MS)
+  recordUsage({ calls: 1 })
 
   let res: Response
   try {
@@ -137,17 +140,16 @@ async function requestJson(body: Record<string, unknown>): Promise<ChatResponse>
         max_tokens: 8_192,
         ...body,
       }),
-      signal: controller.signal,
+      signal,
     })
   } catch (err) {
-    clearTimeout(timer)
-    if ((err as Error).name === 'AbortError') {
+    if (runContext.getStore()?.signal.aborted) throw err
+    if (signal.aborted) {
       throw new LlmError('DeepSeek request timed out', 'TIMEOUT')
     }
     throw new LlmError('Could not reach DeepSeek API: ' + (err as Error).message, 'NETWORK')
   }
 
-  clearTimeout(timer)
 
   if (!res.ok) {
     const bodyText = await res.text().catch(() => '')
@@ -155,7 +157,9 @@ async function requestJson(body: Record<string, unknown>): Promise<ChatResponse>
     throw new LlmError(`DeepSeek request failed (${res.status}): ${bodyText.slice(0, 500)}`, status)
   }
 
-  return (await res.json()) as ChatResponse
+  const data = await res.json() as ChatResponse
+  recordUsage({ promptTokens: data.usage?.prompt_tokens, completionTokens: data.usage?.completion_tokens })
+  return data
 }
 
 async function requestAssistant(
@@ -165,6 +169,7 @@ async function requestAssistant(
   let lastError: LlmError | undefined
   for (let attempt = 1; attempt <= MAX_RESPONSE_ATTEMPTS; attempt++) {
     const data = await requestJson(body)
+    if (['length', 'content_filter', 'insufficient_system_resource'].includes(data.choices?.[0]?.finish_reason ?? '')) throw responseError(data)
     const message = data.choices?.[0]?.message
     const content = message?.content?.trim() ?? ''
     const toolCalls: LlmToolCall[] = (message?.tool_calls ?? []).map((tc) => ({
@@ -193,8 +198,8 @@ async function requestAssistantStream(
     throw new LlmError('Missing DEEPSEEK_API_KEY in the environment', 'NO_API_KEY')
   }
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  const signal = requestSignal(REQUEST_TIMEOUT_MS)
+  recordUsage({ calls: 1 })
 
   try {
     const res = await fetch(`${config.deepseekBaseUrl}/chat/completions`, {
@@ -209,8 +214,9 @@ async function requestAssistantStream(
         max_tokens: 8_192,
         ...body,
         stream: true,
+        stream_options: { include_usage: true },
       }),
-      signal: controller.signal,
+      signal,
     })
 
     if (!res.ok) {
@@ -225,19 +231,22 @@ async function requestAssistantStream(
     const toolParts = new Map<number, { id: string; name: string; arguments: string }>()
     let buffer = ''
     let content = ''
+    let streamDone = false
     let finishReason: string | null | undefined
 
     const consumeLine = (line: string) => {
       const trimmed = line.trim()
       if (!trimmed.startsWith('data:')) return
       const payload = trimmed.slice(5).trim()
-      if (!payload || payload === '[DONE]') return
+      if (payload === '[DONE]') { streamDone = true; return }
+      if (!payload) return
       let data: ChatStreamResponse
       try {
         data = JSON.parse(payload) as ChatStreamResponse
       } catch {
         return
       }
+      recordUsage({ promptTokens: data.usage?.prompt_tokens, completionTokens: data.usage?.completion_tokens })
       const choice = data.choices?.[0]
       if (!choice) return
       if (choice.finish_reason) finishReason = choice.finish_reason
@@ -273,6 +282,7 @@ async function requestAssistantStream(
     buffer += decoder.decode()
     if (buffer.trim()) consumeLine(buffer)
 
+    if (!streamDone && !finishReason) throw new LlmError('DeepSeek stream ended before completion', 'INVALID_RESPONSE')
     const finishError = streamFinishError(finishReason)
     if (finishError) throw finishError
 
@@ -286,13 +296,12 @@ async function requestAssistantStream(
     }
     throw new LlmError('DeepSeek returned an empty final answer', 'EMPTY_RESPONSE')
   } catch (err) {
-    if ((err as Error).name === 'AbortError') {
+    if (runContext.getStore()?.signal.aborted) throw err
+    if (signal.aborted) {
       throw new LlmError('DeepSeek request timed out', 'TIMEOUT')
     }
     if (err instanceof LlmError) throw err
     throw new LlmError('Could not reach DeepSeek API: ' + (err as Error).message, 'NETWORK')
-  } finally {
-    clearTimeout(timer)
   }
 }
 

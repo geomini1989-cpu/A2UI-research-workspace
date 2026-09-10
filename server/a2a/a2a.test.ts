@@ -46,7 +46,7 @@ describe('real A2A HTTP transport', () => {
     await app.ready()
     const injectedFetch: typeof fetch = async (input, init) => {
       const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
-      const response = await app!.inject({ method: (init?.method ?? 'GET') as 'GET' | 'POST', url: url.pathname, headers: init?.headers as Record<string, string>, payload: init?.body ? String(init.body) : undefined })
+      const response = await app!.inject({ method: (init?.method ?? 'GET') as 'GET' | 'POST', url: url.pathname, headers: Object.fromEntries(new Headers(init?.headers)), payload: init?.body ? String(init.body) : undefined })
       return new Response(response.body, { status: response.statusCode, headers: response.headers as Record<string, string> })
     }
     const card = await discoverAgentCard('http://127.0.0.1:32191', injectedFetch)
@@ -84,7 +84,7 @@ describe('real A2A HTTP transport', () => {
     await app.ready()
     const injectedFetch: typeof fetch = async (input, init) => {
       const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
-      const response = await app!.inject({ method: (init?.method ?? 'GET') as 'GET' | 'POST', url: url.pathname, headers: init?.headers as Record<string, string>, payload: init?.body ? String(init.body) : undefined })
+      const response = await app!.inject({ method: (init?.method ?? 'GET') as 'GET' | 'POST', url: url.pathname, headers: Object.fromEntries(new Headers(init?.headers)), payload: init?.body ? String(init.body) : undefined })
       return new Response(response.body, { status: response.statusCode, headers: response.headers as Record<string, string> })
     }
     for (const path of [AGENT_CARD_PATH, MARKET_AGENT_CARD_PATH, TECHNOLOGY_AGENT_CARD_PATH]) {

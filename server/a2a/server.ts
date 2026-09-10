@@ -1,3 +1,4 @@
+import { runContext, newUsage } from '../runtime/context.js'
 import { AgentCard, Role, SSE_HEADERS, TaskState, formatSSEEvent, type Message, type Part, type Task } from '@a2a-js/sdk'
 import { AgentEvent, DefaultRequestHandler, InMemoryTaskStore, JsonRpcTransportHandler, ServerCallContext, type AgentExecutor, type ExecutionEventBus, type RequestContext } from '@a2a-js/sdk/server'
 import type { FastifyInstance } from 'fastify'
@@ -34,6 +35,7 @@ class SpecialistAgentExecutor implements AgentExecutor {
     try {
       const request = context.userMessage.parts.map(partText).filter(Boolean).join('\n')
       const result = assertStructuredResearchResult(await this.runner(request, publishActivity))
+      result.usage = runContext.getStore()?.usage
       if (result.dimension !== this.dimension) throw new Error(`Specialist returned dimension ${result.dimension}; expected ${this.dimension}`)
       bus.publish(AgentEvent.artifactUpdate({ taskId, contextId, append: false, lastChunk: true, metadata: undefined, artifact: { artifactId: crypto.randomUUID(), name: `${result.agentId}-research-result`, description: 'Validated structured research-result/v2 artifact; contains no UI or executable code.', parts: [{ content: { $case: 'data', value: result }, metadata: undefined, filename: '', mediaType: 'application/json' }], metadata: { schema: 'research-result/v2' }, extensions: [] } }))
       bus.publish(AgentEvent.statusUpdate({ taskId, contextId, metadata: undefined, status: { state: TaskState.TASK_STATE_COMPLETED, timestamp: new Date().toISOString(), message: statusMessage(contextId, taskId, `${this.agentName} research completed`) } }))
@@ -68,6 +70,9 @@ function registerCardRoute(app: FastifyInstance, path: string, card: AgentCard) 
 
 function registerTransportRoute(app: FastifyInstance, path: string, transport: JsonRpcTransportHandler) {
   app.post(path, async (req, reply) => {
+    const controller = new AbortController()
+    reply.raw.on('close', () => controller.abort())
+    return runContext.run({ ownerId: 'specialist', signal: controller.signal, mode: 'multi', usage: newUsage() }, async () => {
     const requestedVersion = typeof req.headers['a2a-version'] === 'string' ? req.headers['a2a-version'] : '1.0'
     const response = await transport.handle(req.body as Record<string, unknown>, new ServerCallContext({ requestedVersion }))
     if (Symbol.asyncIterator in Object(response)) {
@@ -83,6 +88,7 @@ function registerTransportRoute(app: FastifyInstance, path: string, transport: J
       return
     }
     return reply.type('application/json').send(response)
+    })
   })
 }
 

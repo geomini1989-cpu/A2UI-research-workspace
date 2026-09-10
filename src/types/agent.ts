@@ -62,6 +62,8 @@ export interface ActionExecutionState {
 
 /** Stream event envelope delivered by the backend over NDJSON. */
 export type AgentStreamEvent =
+  | { type: 'evidence'; unavailable?: { agentName: string; reason: string }[]; evidence: import('../../server/orchestration/types.js').ResearchEvidence[] }
+  | { type: 'telemetry'; runId: string; durationMs: number; calls: number; promptTokens: number; completionTokens: number }
   | { type: 'status'; status: string }
   | { type: 'activity'; actor: string; activity: string; detail?: string }
   | { type: 'task_state'; state: 'RUNNING' | 'WAITING_FOR_USER' | 'COMPLETED' | 'FAILED' | 'CANCELLED'; taskId: string; interactionId?: string }

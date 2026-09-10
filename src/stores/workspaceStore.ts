@@ -1,247 +1,177 @@
 import { create } from 'zustand'
-
-import { streamChat, streamAction } from '@/services/agentService'
+import { apiJson, streamChat, streamAction } from '@/services/agentService'
 import { clearSurfaces, processA2uiMessages, setActionHandler } from '@/components/a2ui/a2uiEngine'
-import type { WorkspaceState } from '@/types/chat'
-import { isSemanticAction, type AgentAction, type AgentStreamEvent } from '@/types/agent'
+import type { AgentAction, AgentStreamEvent } from '@/types/agent'
+import { isSemanticAction } from '@/types/agent'
+import type { ChatMessage, AgentActivity, TaskStatus } from '@/types/chat'
+import type { ResearchEvidence } from '../../server/orchestration/types.js'
 import { inferPresentationMode } from '@/components/a2ui/presentation'
 
-let seq = 0
-const nextId = (prefix: string) => `${prefix}-${Date.now()}-${seq++}`
-
-interface WorkspaceStore extends WorkspaceState {
-  surfaceVersion: number
+export interface ResearchTurn {
+  id: string
+  prompt: string
+  answer: string
+  followUps: ChatMessage[]
+  surfaceIds: string[]
+  unavailable: { agentName: string; reason: string }[]
+  evidence: ResearchEvidence[]
+  activities: AgentActivity[]
+  status: string
+  taskStatus: TaskStatus
+  error: string | null
+  mode: 'compact' | 'standard' | 'rich'
+  lastAction?: AgentAction
+}
+interface HistoryRun {
+  id: string
+  request: { kind: 'chat' | 'action'; payload: Record<string, unknown> }
+  events: AgentStreamEvent[]
+  running: boolean
+}
+interface WorkspaceStore {
+  turns: ResearchTurn[]
+  isGenerating: boolean
+  activeTurnId: string | null
+  ready: boolean
+  needsAccessKey: boolean
+  error: string | null
+  sourceLabel: string
+  initialize: (accessKey?: string) => Promise<void>
   sendMessage: (text: string) => Promise<void>
   handleAction: (action: AgentAction) => Promise<void>
-  backDrillDown: () => void
-  collapseDrillDown: (surfaceId: string) => void
-  reopenDrillDown: (surfaceId: string) => void
-  retryDrillDown: () => void
-  clear: () => void
+  retry: (id: string) => void
+  stop: () => void
+  clear: () => Promise<void>
 }
-
-function createdSurfaceId(event: AgentStreamEvent): string | null {
-  if (event.type !== 'message' || !event.message || typeof event.message !== 'object') return null
-  const create = (event.message as { createSurface?: { surfaceId?: unknown } }).createSurface
-  return typeof create?.surfaceId === 'string' ? create.surfaceId : null
-}
-
-function semanticQuestion(action: AgentAction): string {
+let controller: AbortController | undefined
+let initialization: Promise<void> | undefined
+const newTurn = (id: string, prompt: string): ResearchTurn => ({
+  id, prompt, answer: '', followUps: [], surfaceIds: [], evidence: [], unavailable: [], activities: [], status: '正在分析…',
+  taskStatus: 'RUNNING', error: null, mode: inferPresentationMode(prompt),
+})
+function question(action: AgentAction) {
   const c = action.context
-  const subject = String(c.company ?? c.subject ?? '当前内容')
-  switch (action.name) {
-    case 'explore_metric': return `${subject} 的 ${String(c.metric ?? '这个指标')} 最值得关注什么？`
-    case 'explore_company': return `${String(c.company ?? subject)} 最值得关注什么？`
-    case 'explore_risk': return `${subject} 的 ${String(c.risk ?? '这个风险')} 会如何影响判断？`
-    case 'explore_segment': return `${subject} 的 ${String(c.segment ?? '这个业务')} 关键变化是什么？`
-    case 'explore_event': return `这个事件对 ${subject} 的核心影响是什么？`
-    case 'explore_period': return `${subject} 在 ${String(c.period ?? '这个期间')} 为什么出现当前表现？`
-    case 'compare_item': return `围绕 ${String(c.comparisonTarget ?? '这个比较项')}，关键结论是什么？`
-    case 'view_source': return `这条结论的数据来源和局限是什么？`
-    case 'change_time_range': return `换到 ${String(c.timeRange ?? '这个时间范围')} 后，趋势判断有什么变化？`
-    default: return `补充一下 ${subject} 最关键的细节。`
-  }
+  return String(c.company ?? c.subject ?? '当前研究') + '：进一步了解' + String(c.metric ?? c.risk ?? c.segment ?? c.period ?? '这项内容')
 }
-
-function handleStreamEvent(
-  get: () => WorkspaceStore,
-  set: (partial: Partial<WorkspaceStore>) => void,
-  event: AgentStreamEvent,
-  localDrillFailure = false,
-) {
-  switch (event.type) {
-    case 'status':
-      set({ agentStatus: event.status })
-      break
-    case 'activity':
-      set({ activities: [...get().activities, { id: nextId('activity'), actor: event.actor, activity: event.activity, detail: event.detail, createdAt: Date.now() }] })
-      break
-    case 'task_state':
-      set({
-        taskStatus: event.state,
-        activeTaskId: event.taskId,
-        activeInteractionId: event.state === 'COMPLETED' || event.state === 'FAILED' || event.state === 'CANCELLED'
-          ? null
-          : event.interactionId ?? get().activeInteractionId,
-        isGenerating: event.state === 'RUNNING',
-        agentStatus: event.state === 'WAITING_FOR_USER' ? '等待你的输入' : event.state === 'CANCELLED' ? '已取消' : get().agentStatus,
-      })
-      break
-    case 'agent_text': {
-      // Accumulate agent replies into the most recent agent message.
-      const messages = get().messages
-      const text = event.text === '已生成研究视图（Demo 数据）' ? '研究结果已整理如下。' : event.text
-      const last = messages[messages.length - 1]
-      if (last && last.role === 'agent') {
-        set({
-          messages: [
-            ...messages.slice(0, -1),
-            { ...last, content: last.content + text },
-          ],
-        })
-      } else {
-        set({
-          messages: [
-            ...messages,
-            {
-              id: nextId('agent'),
-              role: 'agent',
-              content: text,
-              createdAt: Date.now(),
-              kind: last?.kind === 'followup' ? 'followup' : undefined,
-            },
-          ],
-        })
-      }
-      break
-    }
-    case 'message':
-      processA2uiMessages([event.message])
-      set({ surfaceVersion: get().surfaceVersion + 1, rootSurfaceId: get().rootSurfaceId ?? createdSurfaceId(event) })
-      break
-    case 'done':
-      set({ isGenerating: false, agentStatus: get().taskStatus === 'CANCELLED' ? '已取消' : '完成' })
-      break
-    case 'error':
-      set({
-        error: localDrillFailure ? null : event.error,
-        isGenerating: false,
-        agentStatus: get().taskStatus === 'WAITING_FOR_USER' ? '输入无效，请修正' : '出错',
-        taskStatus: get().taskStatus === 'WAITING_FOR_USER' ? 'WAITING_FOR_USER' : 'FAILED',
-      })
-      break
-  }
-}
-
 export const useWorkspaceStore = create<WorkspaceStore>((set, get) => {
-  setActionHandler((action) => {
-    void get().handleAction(action)
-  })
-
+  const patch = (id: string, update: Partial<ResearchTurn>) =>
+    set({ turns: get().turns.map(turn => turn.id === id ? { ...turn, ...update } : turn) })
+  const current = (id: string) => get().turns.find(turn => turn.id === id)!
+  const isQa = (action?: AgentAction) => Boolean(action && isSemanticAction(action.name) && action.name !== 'apply_filters')
+  const startAction = (id: string, action: AgentAction) => {
+    const turn = current(id)
+    patch(id, {
+      error: null, lastAction: action, activities: [], status: '正在处理…', taskStatus: 'RUNNING',
+      followUps: isQa(action) ? [...turn.followUps,
+        { id: crypto.randomUUID(), role: 'user', content: question(action), createdAt: Date.now() },
+        { id: crypto.randomUUID(), role: 'agent', content: '', createdAt: Date.now() },
+      ] : turn.followUps,
+    })
+  }
+  const handleEvent = (id: string, event: AgentStreamEvent, qa: boolean) => {
+    const turn = current(id)
+    switch (event.type) {
+      case 'status': patch(id, { status: event.status }); break
+      case 'activity':
+        patch(id, { activities: [...turn.activities, { id: crypto.randomUUID(), actor: event.actor, activity: event.activity, detail: event.detail, createdAt: Date.now() }] })
+        break
+      case 'task_state':
+        patch(id, { taskStatus: event.state, status: event.state === 'WAITING_FOR_USER' ? '等待你的输入' : turn.status })
+        break
+      case 'message': {
+        processA2uiMessages([event.message])
+        const create = (event.message as { createSurface?: { surfaceId: string } }).createSurface
+        if (create && !turn.surfaceIds.includes(create.surfaceId)) patch(id, { surfaceIds: [...turn.surfaceIds, create.surfaceId] })
+        break
+      }
+      case 'agent_text':
+        if (qa) {
+          patch(id, { followUps: turn.followUps.map((message, index) => index === turn.followUps.length - 1 ? { ...message, content: message.content + event.text } : message) })
+        } else patch(id, { answer: turn.answer + event.text })
+        break
+      case 'evidence':
+        patch(id, { unavailable: event.unavailable ?? turn.unavailable, evidence: [...new Map([...turn.evidence, ...event.evidence].map(item => [item.id, item])).values()] })
+        break
+      case 'error': patch(id, { error: event.error, taskStatus: turn.taskStatus === 'WAITING_FOR_USER' ? turn.taskStatus : 'FAILED', status: '研究未完成' }); break
+      case 'done': patch(id, { status: '完成' }); break
+    }
+  }
+  const execute = async (id: string, action?: AgentAction) => {
+    controller = new AbortController()
+    const signal = controller.signal
+    set({ isGenerating: true, activeTurnId: id })
+    try {
+      const onEvent = (event: AgentStreamEvent) => handleEvent(id, event, isQa(action))
+      if (action) await streamAction(action, onEvent, signal)
+      else await streamChat(current(id).prompt, onEvent, signal)
+    } catch (error) {
+      patch(id, signal.aborted
+        ? { status: '已停止', taskStatus: 'CANCELLED', error: null }
+        : { status: '研究未完成', taskStatus: 'FAILED', error: (error as Error).message })
+    } finally {
+      controller = undefined
+      set({ isGenerating: false, activeTurnId: null })
+    }
+  }
+  setActionHandler(action => { void get().handleAction(action) })
   return {
-    messages: [],
-    isGenerating: false,
-    activeSurfaceId: null,
-    agentStatus: '',
-    activities: [],
-    taskStatus: 'COMPLETED',
-    activeTaskId: null,
-    activeInteractionId: null,
-    rootSurfaceId: null,
-    surfaceHistory: [],
-    pendingDrill: null,
-    drillError: null,
-    error: null,
-    surfaceVersion: 0,
-    presentationMode: 'standard',
-
-    sendMessage: async (text) => {
-      const trimmed = text.trim()
-      if (!trimmed || get().isGenerating) return
-
-      clearSurfaces()
-      set({
-        messages: [
-          ...get().messages,
-          { id: nextId('user'), role: 'user', content: trimmed, createdAt: Date.now() },
-        ],
-        isGenerating: true,
-        agentStatus: '正在分析…',
-        error: null,
-        activities: [],
-        taskStatus: 'RUNNING',
-        activeTaskId: null,
-        activeInteractionId: null,
-        surfaceVersion: 0,
-        rootSurfaceId: null,
-        surfaceHistory: [],
-        pendingDrill: null,
-        drillError: null,
-        presentationMode: inferPresentationMode(trimmed),
-      })
-
+    turns: [], isGenerating: false, activeTurnId: null, ready: false, needsAccessKey: false, error: null, sourceLabel: '',
+    initialize: accessKey => initialization ??= (async () => {
       try {
-        await streamChat(trimmed, (event) => handleStreamEvent(get, set, event))
-      } catch (err) {
-        set({
-          error: err instanceof Error ? err.message : '请求失败，请稍后再试',
-          isGenerating: false,
-          agentStatus: '出错',
-        })
-      }
+        const session = await fetch('/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accessKey }) })
+        if (session.status === 401) { set({ needsAccessKey: true, ready: true, error: accessKey ? '访问口令不正确' : null }); return }
+        if (!session.ok) throw new Error('无法连接工作台')
+        const [history, health] = await Promise.all([
+          apiJson<HistoryRun[]>('/api/history'),
+          apiJson<{ researchProvider: { sourceLabel: string } }>('/api/health'),
+        ])
+        clearSurfaces()
+        set({ turns: [], needsAccessKey: false, error: null, sourceLabel: health.researchProvider.sourceLabel })
+        for (const run of history) {
+          const payload = run.request.payload
+          let id = run.id
+          let action: AgentAction | undefined
+          if (run.request.kind === 'chat') {
+            set({ turns: [...get().turns, newTurn(id, String(payload.message))] })
+          } else {
+            action = payload as unknown as AgentAction
+            const previous = [...get().turns].reverse().find(turn => turn.surfaceIds.includes(action!.surfaceId))
+            if (previous) id = previous.id
+            else set({ turns: [...get().turns, newTurn(id, '继续研究')] })
+            startAction(id, action)
+          }
+          for (const event of run.events) handleEvent(id, event, isQa(action))
+          if (run.running) patch(id, { taskStatus: 'FAILED', status: '研究连接已断开', error: '上一研究尚未结束，请稍后打开对应研究任务或重试。' })
+        }
+        set({ ready: true })
+      } catch (error) { set({ ready: true, error: (error as Error).message }) }
+    })().finally(() => { initialization = undefined }),
+    sendMessage: async text => {
+      if (!text.trim() || get().isGenerating) return
+      const id = crypto.randomUUID()
+      set({ turns: [...get().turns, newTurn(id, text.trim())] })
+      await execute(id)
     },
-
-    handleAction: async (action) => {
+    handleAction: async action => {
       if (get().isGenerating) return
-      const semantic = isSemanticAction(action.name)
-      const filtering = action.name === 'apply_filters'
-      const qa = semantic && !filtering
-      // Add/remove actions mutate the Composer in place. composer_start is a
-      // transition to a new research surface, so the first generated surface
-      // replaces the Composer instead of sharing its component graph.
-      const inlineComposer = action.name.startsWith('composer_') && action.name !== 'composer_start'
-      const question = qa ? semanticQuestion(action) : null
-      const currentMessages = get().messages
-      set({
-        messages: question
-          ? [...currentMessages, { id: nextId('user'), role: 'user', content: question, createdAt: Date.now(), kind: 'followup' }]
-          : currentMessages,
-        isGenerating: true,
-        agentStatus: filtering ? '正在更新分析…' : qa ? '正在回答追问…' : '正在执行操作…',
-        error: null,
-        activities: [],
-        pendingDrill: null,
-        drillError: null,
-      })
-      let surfaceCleared = false
+      const turn = [...get().turns].reverse().find(item => item.surfaceIds.includes(action.surfaceId))
+      if (!turn) return
+      startAction(turn.id, action)
+      await execute(turn.id, action)
+    },
+    retry: id => {
+      const turn = current(id)
+      if (turn.lastAction) void get().handleAction(turn.lastAction)
+      else void get().sendMessage(turn.prompt)
+    },
+    stop: () => controller?.abort(),
+    clear: async () => {
+      if (get().isGenerating) return
       try {
-        await streamAction(
-          {
-            name: action.name,
-            surfaceId: action.surfaceId,
-            sourceComponentId: action.sourceComponentId,
-            context: action.context,
-          },
-          (event) => {
-            // Preserve the current generated research surface for semantic Q&A.
-            // Only non-semantic actions that genuinely navigate to another flow
-            // replace the current surface.
-            if (!semantic && !inlineComposer && event.type === 'message' && !surfaceCleared) {
-              clearSurfaces()
-              set({ rootSurfaceId: null, surfaceHistory: [] })
-              surfaceCleared = true
-            }
-            handleStreamEvent(get, set, event)
-          },
-        )
-      } catch (err) {
-        const message = err instanceof Error ? err.message : '操作失败，请稍后再试'
-        set({
-          error: message,
-          drillError: null,
-          pendingDrill: null,
-          isGenerating: false,
-          agentStatus: '出错',
-        })
-      }
-    },
-
-    backDrillDown: () => {
-      const history = get().surfaceHistory
-      const current = [...history].filter((item) => !item.collapsed).sort((a, b) => b.depth - a.depth)[0]
-      if (current) set({ surfaceHistory: history.map((item) => item.surfaceId === current.surfaceId ? { ...item, collapsed: true } : item), drillError: null })
-    },
-
-    collapseDrillDown: (surfaceId) => set({ surfaceHistory: get().surfaceHistory.map((item) => item.surfaceId === surfaceId ? { ...item, collapsed: true } : item) }),
-    reopenDrillDown: (surfaceId) => set({ surfaceHistory: get().surfaceHistory.map((item) => item.surfaceId === surfaceId ? { ...item, collapsed: false } : item) }),
-    retryDrillDown: () => {
-      const action = get().drillError?.action
-      if (action) void get().handleAction(action)
-    },
-
-    clear: () => {
-      clearSurfaces()
-      set({ messages: [], isGenerating: false, activeSurfaceId: null, agentStatus: '', error: null, activities: [], taskStatus: 'COMPLETED', activeTaskId: null, activeInteractionId: null, surfaceVersion: 0, presentationMode: 'standard', rootSurfaceId: null, surfaceHistory: [], pendingDrill: null, drillError: null })
+        await apiJson('/api/history', { method: 'DELETE' })
+        clearSurfaces()
+        set({ turns: [], error: null })
+      } catch (error) { set({ error: (error as Error).message }) }
     },
   }
 })

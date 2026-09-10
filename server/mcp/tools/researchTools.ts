@@ -66,7 +66,7 @@ function profileText(sourceLabel: string, profile: CompanyProfile): string {
     `Source: ${sourceLabel}`,
     `# ${profile.name} (${profile.ticker})`,
     `Sector: ${profile.sector} | Industry: ${profile.industry}`,
-    `HQ: ${profile.headquarters} | Founded: ${profile.founded} | Employees: ${profile.employees}`,
+    `HQ: ${profile.headquarters} | Founded: ${profile.founded ?? '未提供'} | Employees: ${profile.employees}`,
     profile.description,
     `Market position: ${profile.market.position}`,
     `Market sentiment: ${profile.market.sentiment}`,
@@ -97,7 +97,7 @@ function financialText(
     rows('Growth', financial.growth),
     rows('Profitability', financial.profitability),
     rows('Valuation', financial.valuation),
-    'Quarterly history:',
+    'Historical reporting periods:',
     ...history,
     rows('Cash flow', financial.cashFlow),
     rows('Capital allocation', financial.capitalAllocation),
@@ -157,6 +157,7 @@ export async function executeResearchToolWithProvider(
         data: {
           source: metadata.sourceLabel,
           provider: metadata,
+          provenance: profile.source,
           profile,
         },
       }
@@ -169,6 +170,7 @@ export async function executeResearchToolWithProvider(
         data: {
           source: metadata.sourceLabel,
           provider: metadata,
+          provenance: result.source,
           company: result.company,
           financial: result.financial,
         },

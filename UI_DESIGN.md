@@ -1,3 +1,5 @@
+> 历史设计记录：当前运行架构、数据能力与验收方式以 [README](./README.md) 为准。
+
 # Conversation-native UI design
 
 This phase keeps the conversation shell and extends it with semantic drill-down. Agent routing,

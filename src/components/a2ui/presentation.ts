@@ -1,4 +1,4 @@
-import type { AgentActivity, WorkspaceState } from '../../types/chat.js'
+import type { AgentActivity, TaskStatus } from '../../types/chat.js'
 
 export type PresentationMode = 'compact' | 'standard' | 'rich'
 
@@ -25,7 +25,7 @@ export function needsChartDetail(dataPoints: number, requestedHeight?: number): 
 }
 
 export function processSummary(
-  taskStatus: WorkspaceState['taskStatus'],
+  taskStatus: TaskStatus,
   activities: readonly AgentActivity[],
 ): string {
   const completed = activities.filter((item) => /complete/i.test(item.activity)).length

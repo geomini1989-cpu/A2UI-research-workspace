@@ -6,6 +6,16 @@ import path from 'node:path'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    rolldownOptions: {
+      output: {
+        codeSplitting: { groups: [
+          { name: 'charts', test: /node_modules[\\/](recharts|d3-|victory-)/ },
+          { name: 'a2ui', test: /node_modules[\\/](@a2ui|zod)[\\/]/ },
+        ] },
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),

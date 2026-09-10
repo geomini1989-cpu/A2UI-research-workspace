@@ -7,6 +7,8 @@ import type {
   FinancialSummary,
 } from './research.js'
 
+const DataSource = z.object({ url: z.string().url(), retrievedAt: z.string().datetime(), period: z.string().max(80).optional() })
+
 const MarketShare = z.object({
   segment: z.string().min(1).max(160),
   value: z.number().finite(),
@@ -56,13 +58,15 @@ const CompanyRiskSchema = z.object({
 })
 
 export const CompanyProfileSchema = z.object({
+  source: DataSource.optional(),
+  availableDimensions: z.array(z.string()).optional(),
   id: z.string().min(1).max(120),
   name: z.string().min(1).max(120),
   ticker: z.string().min(1).max(32),
   sector: z.string().min(1).max(120),
   industry: z.string().min(1).max(160),
   headquarters: z.string().min(1).max(160),
-  founded: z.number().int().min(1600).max(2200),
+  founded: z.number().int().min(1600).max(2200).nullable(),
   employees: z.string().min(1).max(80),
   description: z.string().min(1).max(800),
   highlights: z.array(z.string().min(1).max(240)).max(40),
@@ -79,9 +83,9 @@ const LabelValue = z.object({
 const FinancialHistoryPointSchema = z.object({
   period: z.string().min(1).max(80),
   revenueB: z.number().finite(),
-  grossMarginPct: z.number().finite(),
-  operatingMarginPct: z.number().finite(),
-  eps: z.number().finite(),
+  grossMarginPct: z.number().finite().optional(),
+  operatingMarginPct: z.number().finite().optional(),
+  eps: z.number().finite().optional(),
 })
 
 export const FinancialSummarySchema = z.object({
@@ -106,6 +110,7 @@ export const CompanySearchResultSchema = z.object({
 })
 
 export const CompanyFinancialDataSchema = z.object({
+  source: DataSource.optional(),
   company: z.string().min(1).max(120),
   ticker: z.string().min(1).max(32).optional(),
   financial: FinancialSummarySchema,

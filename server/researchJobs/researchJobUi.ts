@@ -1,6 +1,6 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 
-import { buildA2uiMessages } from '../a2ui/a2uiGenerator.js'
+import { buildTrustedA2uiMessages } from '../a2ui/a2uiGenerator.js'
 import { RESEARCH_CATALOG_ID } from '../a2ui/a2uiSchema.js'
 import type { ResearchJob } from './researchJobService.js'
 
@@ -19,7 +19,7 @@ function surface(surfaceId: string, components: Component[], data: Record<string
     gap: 16,
     children: components.filter((item) => !nestedIds.has(String(item.id))).map((item) => ref(String(item.id))),
   }
-  return buildA2uiMessages([
+  return buildTrustedA2uiMessages([
     { version: 'v0.9', createSurface: { surfaceId, catalogId: RESEARCH_CATALOG_ID, theme: {} } },
     { version: 'v0.9', updateDataModel: { surfaceId, path: '/', value: data } },
     { version: 'v0.9', updateComponents: { surfaceId, components: [root, ...components] } },
@@ -103,5 +103,7 @@ export function researchJobStatusSurface(job: ResearchJob, surfaceId: string): A
     { component: 'Text', id: 'job-id', variant: 'body', text: '任务编号：' + job.id },
     { component: 'Text', id: 'company', variant: 'body', text: '研究对象：' + job.company },
     { component: 'Text', id: 'scope', variant: 'body', text: '研究维度：' + job.dimensions.map((item) => DIMENSION_LABELS[item]).join(' · ') },
+    ...(job.error ? [{ component: 'Text', id: 'failure', variant: 'body', text: job.error }] : []),
+    ...(['FAILED', 'CANCELLED'].includes(job.status) ? [{ component: 'Button', id: 'retry', label: '重试研究', variant: 'primary', action: { event: { name: 'start_research_job', context: { jobId: job.id } } } }] : []),
   ], {})
 }

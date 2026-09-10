@@ -1,3 +1,4 @@
+import { getResearchProvider } from '../providers/index.js'
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { RESEARCH_CATALOG_ID, sanitizeAgentMessage, sanitizeMessage, stripCodeFences } from './a2uiSchema.js'
 import { buildStableLayoutPlan, stableTopLevelOrder } from './layoutPolicy.js'
@@ -308,7 +309,7 @@ function ensureDataSource(messages: A2uiMessage[]): A2uiMessage[] {
   const block: Record<string, unknown>[] = [
     { component: 'Divider', id: unique('ds-div') },
     { component: 'Text', id: unique('ds-label'), variant: 'caption', text: '数据来源' },
-    { component: 'Badge', id: unique('ds-badge'), label: 'Demo / MCP Research Tool', variant: 'secondary' },
+    { component: 'Badge', id: unique('ds-badge'), label: getResearchProvider().metadata.kind === 'demo' ? 'Demo / MCP Research Tool' : getResearchProvider().metadata.sourceLabel, variant: 'secondary' },
   ]
 
   const result = messages.map((m) => {

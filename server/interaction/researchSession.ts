@@ -1,4 +1,5 @@
 import type { SemanticAction } from './semanticActions.js'
+import { readState, writeState } from '../storage/database.js'
 
 export interface DrillDownContext {
   depth: number
@@ -14,19 +15,26 @@ export interface ResearchSession {
   cache: Map<string, string>
 }
 
-const sessions = new Map<string, ResearchSession>()
+interface StoredSession { taskId: string; originalRequest: string; surfaces: Array<[string, DrillDownContext]>; cache: Array<[string, string]> }
+function getSession(taskId: string): ResearchSession | undefined {
+  const stored = readState<StoredSession>('research', taskId)
+  return stored ? { ...stored, surfaces: new Map(stored.surfaces), cache: new Map(stored.cache) } : undefined
+}
+function saveSession(session: ResearchSession) {
+  writeState('research', session.taskId, { ...session, surfaces: [...session.surfaces], cache: [...session.cache] })
+}
 const MAX_DRILL_DEPTH = 3
 
 export function registerResearchSurface(taskId: string, surfaceId: string, originalRequest: string, context?: DrillDownContext) {
-  const session = sessions.get(taskId) ?? { taskId, originalRequest, surfaces: new Map(), cache: new Map() }
+  const session = getSession(taskId) ?? { taskId, originalRequest, surfaces: new Map(), cache: new Map() }
   session.surfaces.set(surfaceId, context ?? { depth: 0, path: [], parentSurfaceId: '', rootTaskId: taskId })
-  sessions.set(taskId, session)
+  saveSession(session)
 }
 
 export function beginDrillDown(action: SemanticAction): { taskId: string; drill: DrillDownContext; cacheKey: string; cached?: string } {
   const taskId = action.context.taskId
   if (!taskId) throw new Error('Semantic action is missing taskId')
-  const session = sessions.get(taskId)
+  const session = getSession(taskId)
   if (!session) throw new Error('Research session has expired; please run the research again')
   const parent = session.surfaces.get(action.surfaceId)
   if (!parent) throw new Error('The selected research surface is no longer available')
@@ -42,5 +50,8 @@ export function beginDrillDown(action: SemanticAction): { taskId: string; drill:
 }
 
 export function cacheDrillDown(taskId: string, key: string, raw: string) {
-  sessions.get(taskId)?.cache.set(key, raw)
+  const session = getSession(taskId)
+  if (!session) return
+  session.cache.set(key, raw)
+  saveSession(session)
 }

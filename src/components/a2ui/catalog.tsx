@@ -550,7 +550,7 @@ const Chart = createComponentImplementation(
     }),
   },
   ({ props, context }: any) => {
-    const seriesMetrics: Array<{ key: string; label: string }> = props.filters?.metrics ?? []
+    const seriesMetrics: Array<{ key: string; label: string }> = React.useMemo(() => props.filters?.metrics ?? [], [props.filters?.metrics])
     const defaultSeriesMetric = (
       props.filters?.defaultMetric
       && seriesMetrics.some((metric) => metric.key === props.filters.defaultMetric)
@@ -566,13 +566,12 @@ const Chart = createComponentImplementation(
     const baseTitle = String(props.title ?? '研究图表')
     const financialMetricChart = /核心财务指标|财务指标|financial metrics/i.test(baseTitle)
       || baseData.some((item) => /营收|每股收益|毛利|市盈率|revenue|eps|margin|p\/e/i.test(String(item[baseXKey] ?? '')))
-    const seriesMetricSignature = seriesMetrics.map((metric) => `${metric.key}:${metric.label}`).join('|')
 
     React.useEffect(() => {
       if (seriesMetrics.length === 0) return
       setSelectedMetric(defaultSeriesMetric)
       setMetricDetail(null)
-    }, [seriesMetricSignature, defaultSeriesMetric])
+    }, [seriesMetrics, defaultSeriesMetric])
 
     React.useEffect(() => subscribeMetricChartDetail((next) => {
       if (next.targetChartId && next.targetChartId !== context.componentModel.id) return
@@ -587,7 +586,7 @@ const Chart = createComponentImplementation(
       }
       setSelectedRange('all')
       setSelectedPoint(null)
-    }), [context.componentModel.id, financialMetricChart, seriesMetricSignature])
+    }), [context.componentModel.id, financialMetricChart, seriesMetrics])
 
     const rangeKey = props.filters?.rangeKey ?? 'range'
     const allData: Record<string, unknown>[] = metricDetail?.data ?? baseData

@@ -829,3 +829,13 @@ button.genui-interactive { width: 100%; border: 0; font: inherit; color: inherit
   .conversation-scroll { scroll-behavior: auto; }
   .genui-process__chevron { transition: none; }
 }
+
+.research-turn { margin-block: 2rem; }
+.research-toolbar { display:flex; align-items:center; justify-content:space-between; gap:1rem; font-size:.875rem; }
+.research-jobs { display:grid; gap:.5rem; margin-block:1rem; }
+.research-jobs button { padding:.75rem; border:1px solid var(--border); border-radius:.5rem; text-align:left; }
+.research-sources { margin-top:1rem; font-size:.875rem; overflow-wrap:anywhere; }
+.research-sources li { margin-block:.75rem; }
+.research-sources a { text-decoration:underline; }
+.research-stop { text-align:center; padding:.5rem; }
+.workspace-access { max-width:24rem; margin:4rem auto; display:grid; gap:1rem; padding:1rem; }

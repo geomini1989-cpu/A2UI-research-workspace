@@ -1,13 +1,12 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-
+import type { AgentEvent } from '../agent/researchAgent.js'
 import type { ResearchDimension } from '../interaction/types.js'
 import { InteractionValidationError, validateCompany, validateDimensions } from '../interaction/validation.js'
+import { db } from '../storage/database.js'
+import { ownerId } from '../runtime/context.js'
 
 export type ResearchDepth = 'quick' | 'deep' | 'comprehensive'
 export type ResearchJobStatus = 'DRAFT' | 'SUBMITTED' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'
-
 export interface ResearchJob {
   id: string
   company: string
@@ -18,151 +17,67 @@ export interface ResearchJob {
   createdAt: string
   updatedAt: string
   submittedAt?: string
+  error?: string
 }
-
-export interface ResearchJobInput {
-  id?: unknown
-  company?: unknown
-  dimensions?: unknown
-  depth?: unknown
-  instructions?: unknown
+export interface ResearchJobInput { id?: unknown; company?: unknown; dimensions?: unknown; depth?: unknown; instructions?: unknown }
+export function createResearchJobId() { return 'RJ-' + new Date().toISOString().slice(0, 10).replaceAll('-', '') + '-' + randomUUID().slice(0, 8).toUpperCase() }
+export function getResearchJob(id: string): ResearchJob | undefined {
+  const row = db.prepare('SELECT body FROM jobs WHERE id = ? AND owner_id = ?').get(id, ownerId())
+  return row ? JSON.parse(row.body as string) as ResearchJob : undefined
 }
-
-const STORE_PATH = join(process.cwd(), '.data', 'research-jobs.json')
-const DEPTHS = ['quick', 'deep', 'comprehensive'] as const
-
-export function createResearchJobId(): string {
-  const date = new Date().toISOString().slice(0, 10).replaceAll('-', '')
-  return 'RJ-' + date + '-' + randomUUID().slice(0, 8).toUpperCase()
+export function listResearchJobs(): ResearchJob[] {
+  return db.prepare('SELECT body FROM jobs WHERE owner_id = ? ORDER BY json_extract(body, \'$.updatedAt\') DESC').all(ownerId())
+    .map(row => JSON.parse(row.body as string) as ResearchJob)
 }
-
-async function readJobs(): Promise<ResearchJob[]> {
-  try {
-    const raw = await readFile(STORE_PATH, 'utf8')
-    return JSON.parse(raw) as ResearchJob[]
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
-    throw error
-  }
-}
-
-async function writeJobs(jobs: ResearchJob[]): Promise<void> {
-  await mkdir(dirname(STORE_PATH), { recursive: true })
-  await writeFile(STORE_PATH, JSON.stringify(jobs, null, 2) + '\n', 'utf8')
-}
-
-function validateId(value: unknown): string | undefined {
-  if (value === undefined || value === null || value === '') return undefined
-  if (typeof value !== 'string' || !/^RJ-[A-Z0-9-]+$/i.test(value)) {
-    throw new InteractionValidationError('Invalid research job id')
-  }
-  return value
-}
-
-function validateDepth(value: unknown): ResearchDepth {
-  if (value === undefined || value === null || value === '') return 'deep'
-  if (typeof value !== 'string' || !(DEPTHS as readonly string[]).includes(value)) {
-    throw new InteractionValidationError('Invalid research depth')
-  }
-  return value as ResearchDepth
-}
-
-function validateInstructions(value: unknown): string {
-  if (value === undefined || value === null) return ''
-  if (typeof value !== 'string') throw new InteractionValidationError('Instructions must be a string')
-  return value.trim().slice(0, 1200)
-}
-
-function normalizeInput(input: ResearchJobInput) {
-  return {
-    id: validateId(input.id),
-    company: validateCompany(input.company, 'Company'),
-    dimensions: validateDimensions(input.dimensions),
-    depth: validateDepth(input.depth),
-    instructions: validateInstructions(input.instructions),
-  }
-}
-
-export async function getResearchJob(id: string): Promise<ResearchJob | undefined> {
-  const jobs = await readJobs()
-  return jobs.find((job) => job.id.toLowerCase() === id.toLowerCase())
-}
-
-export async function saveResearchJobDraft(input: ResearchJobInput): Promise<ResearchJob> {
-  const value = normalizeInput(input)
-  const jobs = await readJobs()
+export function saveResearchJobDraft(input: ResearchJobInput): ResearchJob {
+  const id = input.id === undefined ? createResearchJobId() : String(input.id)
+  if (!/^RJ-[A-Z0-9-]+$/i.test(id)) throw new InteractionValidationError('Invalid research job id')
+  const depth = input.depth ?? 'deep'
+  if (!['quick', 'deep', 'comprehensive'].includes(String(depth))) throw new InteractionValidationError('Invalid research depth')
+  if (input.instructions !== undefined && typeof input.instructions !== 'string') throw new InteractionValidationError('Instructions must be a string')
   const now = new Date().toISOString()
-  const id = value.id ?? createResearchJobId()
-  const index = jobs.findIndex((job) => job.id.toLowerCase() === id.toLowerCase())
-
-  if (index >= 0) {
-    if (jobs[index].status !== 'DRAFT') {
-      throw new InteractionValidationError('Only draft research jobs can be edited')
-    }
-    jobs[index] = { ...jobs[index], ...value, id: jobs[index].id, updatedAt: now }
-    await writeJobs(jobs)
-    return jobs[index]
-  }
-
+  const existing = getResearchJob(id)
   const job: ResearchJob = {
-    id,
-    company: value.company,
-    dimensions: value.dimensions,
-    depth: value.depth,
-    instructions: value.instructions,
-    status: 'DRAFT',
-    createdAt: now,
-    updatedAt: now,
+    id: existing?.id ?? id, company: validateCompany(input.company, 'Company'), dimensions: validateDimensions(input.dimensions),
+    depth: depth as ResearchDepth, instructions: (input.instructions as string | undefined ?? '').trim().slice(0, 1200),
+    status: 'DRAFT', createdAt: existing?.createdAt ?? now, updatedAt: now,
   }
-  jobs.push(job)
-  await writeJobs(jobs)
+  const updated = db.prepare("INSERT INTO jobs(id, owner_id, status, body) VALUES (?, ?, 'DRAFT', ?) ON CONFLICT(id) DO UPDATE SET body=excluded.body WHERE jobs.owner_id=excluded.owner_id AND jobs.status='DRAFT' RETURNING id")
+    .get(job.id, ownerId(), JSON.stringify(job))
+  if (!updated) throw new InteractionValidationError('Only your draft research jobs can be edited')
   return job
 }
-
-export async function submitResearchJob(input: ResearchJobInput): Promise<ResearchJob> {
-  const requestedId = validateId(input.id)
-  if (requestedId) {
-    const existing = await getResearchJob(requestedId)
-    if (existing && existing.status !== 'DRAFT') {
-      if (existing.status === 'SUBMITTED' || existing.status === 'RUNNING' || existing.status === 'COMPLETED') return existing
-      throw new InteractionValidationError('This research job cannot be submitted')
-    }
-  }
-
-  const draft = await saveResearchJobDraft(input)
-  const jobs = await readJobs()
-  const index = jobs.findIndex((job) => job.id === draft.id)
+export function submitResearchJob(input: ResearchJobInput): ResearchJob {
+  const existing = typeof input.id === 'string' ? getResearchJob(input.id) : undefined
+  if (existing && ['SUBMITTED', 'RUNNING', 'COMPLETED'].includes(existing.status)) return existing
+  const draft = saveResearchJobDraft(input)
   const now = new Date().toISOString()
-  jobs[index] = { ...jobs[index], status: 'SUBMITTED', submittedAt: now, updatedAt: now }
-  await writeJobs(jobs)
-  return jobs[index]
+  const row = db.prepare("UPDATE jobs SET status='SUBMITTED', body=json_set(body, '$.status', 'SUBMITTED', '$.submittedAt', ?, '$.updatedAt', ?) WHERE id=? AND owner_id=? AND status='DRAFT' RETURNING body")
+    .get(now, now, draft.id, ownerId())!
+  return JSON.parse(row.body as string) as ResearchJob
 }
 
-export async function setResearchJobStatus(id: string, status: ResearchJobStatus): Promise<ResearchJob> {
-  const jobs = await readJobs()
-  const index = jobs.findIndex((job) => job.id.toLowerCase() === id.toLowerCase())
-  if (index < 0) throw new InteractionValidationError('Research job not found')
-  jobs[index] = { ...jobs[index], status, updatedAt: new Date().toISOString() }
-  await writeJobs(jobs)
-  return jobs[index]
+// 条件更新即领取任务；重复启动不会再次执行。 / The conditional update claims a job exactly once.
+export function claimResearchJob(id: string): ResearchJob | undefined {
+  const row = db.prepare("UPDATE jobs SET status='RUNNING', result=NULL, body=json_remove(json_set(body, '$.status', 'RUNNING', '$.updatedAt', ?), '$.error') WHERE id=? AND owner_id=? AND status IN ('SUBMITTED','FAILED','CANCELLED') RETURNING body")
+    .get(new Date().toISOString(), id, ownerId())
+  return row ? JSON.parse(row.body as string) as ResearchJob : undefined
 }
-
+export function finishResearchJob(id: string, status: 'COMPLETED' | 'FAILED' | 'CANCELLED', events: AgentEvent[], error?: string) {
+  db.prepare("UPDATE jobs SET status=?, result=?, body=json_set(body, '$.status', ?, '$.updatedAt', ?, '$.error', ?) WHERE id=? AND owner_id=? AND status='RUNNING'")
+    .run(status, JSON.stringify(events), status, new Date().toISOString(), error ?? null, id, ownerId())
+}
+export function getResearchJobResult(id: string): AgentEvent[] {
+  const row = db.prepare('SELECT result FROM jobs WHERE id=? AND owner_id=?').get(id, ownerId())
+  return row?.result ? JSON.parse(row.result as string) as AgentEvent[] : []
+}
 export function buildResearchRequest(job: ResearchJob): string {
-  const depthLabel: Record<ResearchDepth, string> = {
-    quick: '快速',
-    deep: '深度',
-    comprehensive: '全面',
-  }
-  const dimensionLabel: Record<ResearchDimension, string> = {
-    financial: '财务',
-    market: '市场与新闻',
-    technology: '技术与产品',
-  }
-  const parts = [
+  const depthLabel = { quick: '快速', deep: '深度', comprehensive: '全面' }
+  const dimensionLabel = { financial: '财务', market: '市场与新闻', technology: '技术与产品' }
+  return [
     depthLabel[job.depth] + '研究 ' + job.company,
-    '研究维度：' + job.dimensions.map((item) => dimensionLabel[item]).join('、'),
-  ]
-  if (job.instructions) parts.push('附加要求：' + job.instructions)
-  parts.push('这是已提交的研究任务，请直接执行，不要再次要求确认研究范围。')
-  return parts.join('\n')
+    '研究维度：' + job.dimensions.map(item => dimensionLabel[item]).join('、'),
+    job.instructions ? '附加要求：' + job.instructions : '',
+    '这是已提交的研究任务，请直接执行，不要再次要求确认研究范围。',
+  ].filter(Boolean).join('\n')
 }

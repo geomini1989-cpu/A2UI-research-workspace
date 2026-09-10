@@ -8,6 +8,9 @@ import type {
 } from '../orchestration/types.js'
 
 export interface ToolProvenance {
+  url?: string
+  retrievedAt?: string
+  period?: string
   providerId?: string
   providerKind?: 'demo' | 'live'
   sourceLabel?: string
@@ -18,7 +21,9 @@ export function toolProvenance(data: unknown): ToolProvenance {
   const provider = (data as { provider?: unknown }).provider
   if (!provider || typeof provider !== 'object') return {}
   const value = provider as Record<string, unknown>
+  const source = (data as { provenance?: import('../domain/research.js').DataSource }).provenance
   return {
+    url: source?.url, retrievedAt: source?.retrievedAt, period: source?.period,
     providerId: typeof value.id === 'string' ? value.id : undefined,
     providerKind: value.kind === 'demo' || value.kind === 'live' ? value.kind : undefined,
     sourceLabel: typeof value.sourceLabel === 'string' ? value.sourceLabel : undefined,
@@ -41,7 +46,9 @@ export function evidenceFor(
     providerId: provenance.providerId,
     providerKind: provenance.providerKind,
     tool,
-    ref: `${providerId}:${tool}:${slug}`,
+    ref: provenance.url ?? `${providerId}:${tool}:${slug}`,
+    period: provenance.period,
+    retrievedAt: provenance.retrievedAt,
     description,
   }
 }
@@ -122,12 +129,9 @@ export function financialTrends(
     label: definition.label,
     company,
     unit: definition.unit,
-    points: financial.history.map((point) => ({
-      period: point.period,
-      value: point[definition.field],
-    })),
+    points: financial.history.flatMap(point => typeof point[definition.field] === 'number' ? [{ period: point.period, value: point[definition.field] as number }] : []),
     evidenceIds: [evidenceId],
-  }))
+  })).filter(trend => trend.points.length > 0)
 }
 
 export function compactFinding(

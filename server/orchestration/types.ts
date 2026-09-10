@@ -33,6 +33,8 @@ export interface ResearchEntity {
 }
 
 export interface ResearchEvidence {
+  period?: string
+  retrievedAt?: string
   id: string
   sourceName: string
   sourceType: 'mcp' | 'demo'
@@ -113,6 +115,7 @@ export interface NeedUserInput {
  * fields. Natural-language prose is no longer the primary integration format.
  */
 export interface StructuredResearchResult {
+  usage?: { calls: number; promptTokens: number; completionTokens: number }
   schemaVersion: 'research-result/v2'
   agentId: string
   dimension: ResearchDimension

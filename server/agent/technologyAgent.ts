@@ -2,14 +2,14 @@ import { createResearchClient } from '../mcp/client.js'
 import type { CompanyProfile } from '../domain/research.js'
 import type { SpecialistActivity, StructuredResearchResult } from '../orchestration/types.js'
 import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
-import { companiesInRequest } from './specialistUtils.js'
+import { resolveCompaniesInRequest } from './specialistUtils.js'
 import { compactFinding, evidenceFor, profileEntities, profileRisks, toolProvenance, type ToolProvenance } from './structuredResultUtils.js'
 
 export async function runTechnologyAgent(
   request: string,
   onActivity: (activity: SpecialistActivity) => void = () => {},
 ): Promise<StructuredResearchResult> {
-  const companies = companiesInRequest(request)
+  const companies = await resolveCompaniesInRequest(request)
   if (companies.length === 0) throw new Error('No supported company found in the technology research request')
 
   const activities: SpecialistActivity[] = []
@@ -24,6 +24,7 @@ export async function runTechnologyAgent(
       report({ stage: 'tool', message: `Calling MCP get_company_profile for ${company}` })
       const outcome = await client.callTool('get_company_profile', { company })
       const profile = (outcome.data as { profile?: CompanyProfile } | undefined)?.profile
+      if (profile?.availableDimensions && !profile.availableDimensions.includes('technology')) throw new Error('当前来源未提供技术与产品数据，该维度不可用。')
       if (profile) {
         profiles.push(profile)
         provenanceByCompany.set(profile.name, toolProvenance(outcome.data))

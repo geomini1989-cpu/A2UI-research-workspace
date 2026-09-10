@@ -1,0 +1,70 @@
+import { test, expect, type Page } from '@playwright/test'
+
+async function enter(page: Page) {
+  await page.goto('/')
+  await page.getByLabel('访问口令').fill('acceptance')
+  await page.getByRole('button', { name: '进入工作台' }).click()
+  await expect(page.getByPlaceholder('输入公司、对比对象或研究目标…')).toBeEnabled()
+}
+async function ask(page: Page, question: string) {
+  await page.getByPlaceholder('输入公司、对比对象或研究目标…').fill(question)
+  await page.getByRole('button', { name: '发送', exact: true }).click()
+}
+test('保留每轮结果、点击追问，并在刷新后恢复', async ({ page }) => {
+  await enter(page)
+  await ask(page, '分析 NVIDIA 的财务')
+  await expect(page.getByText('$91.5B', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '停止研究' })).toHaveCount(0)
+  await page.getByRole('button', { name: /营收/ }).first().click()
+  await expect(page.getByText('营收反映企业的销售规模。', { exact: false })).toBeVisible()
+  await ask(page, '分析 AMD 的财务')
+  await expect(page.locator('.research-turn')).toHaveCount(2)
+  await expect(page.getByRole('button', { name: '停止研究' })).toHaveCount(0)
+  await page.reload()
+  await expect(page.locator('.research-turn')).toHaveCount(2)
+  await expect(page.locator('.research-turn').first().getByText('$91.5B', { exact: true })).toBeVisible()
+})
+test('草稿刷新恢复、提交执行、完成结果可重新打开', async ({ page }) => {
+  await enter(page)
+  await ask(page, '帮我创建一个 NVIDIA 深度研究任务，重点研究财务，暂时不要执行')
+  await page.getByRole('button', { name: '保存草稿', exact: true }).click()
+  await expect(page.getByText('草稿已保存', { exact: true })).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: '提交任务', exact: true }).click()
+  await page.getByRole('button', { name: '开始研究', exact: true }).click()
+  await expect(page.getByText('$91.5B', { exact: true }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: '停止研究' })).toHaveCount(0)
+  const jobs = await (await page.request.get('/api/jobs')).json()
+  expect(jobs[0].status).toBe('COMPLETED')
+  await ask(page, '打开研究任务 ' + jobs[0].id)
+  await expect(page.locator('.research-turn').last().getByText('$91.5B', { exact: true })).toBeVisible()
+})
+test('重复启动返回已有任务，不产生第二次模型调用', async ({ page }) => {
+  await enter(page)
+  await ask(page, '创建 NVIDIA 深度研究任务，重点研究财务')
+  await page.getByRole('button', { name: '提交任务', exact: true }).click()
+  const job = (await (await page.request.get('/api/jobs')).json())[0]
+  const payload = { name: 'start_research_job', surfaceId: 'research-job-' + job.id, sourceComponentId: 'start', context: { jobId: job.id } }
+  const first = await page.request.post('/api/action', { data: payload })
+  expect((await first.text()).includes('"state":"COMPLETED"')).toBeTruthy()
+  const second = await page.request.post('/api/action', { data: payload })
+  const events = (await second.text()).trim().split('\n').map(line => JSON.parse(line))
+  expect(events.find(event => event.type === 'telemetry').calls).toBe(0)
+})
+test('单个 Specialist 不可用，其余研究仍完成并说明缺失', async ({ page }) => {
+  await enter(page)
+  await ask(page, '全面分析 NVIDIA，包含财务、市场和技术')
+  await expect(page.getByRole('button', { name: '停止研究' })).toHaveCount(0)
+  await expect(page.getByText('$91.5B', { exact: true }).first()).toBeVisible()
+  await expect(page.locator('.research-limitation')).toContainText('暂不可用')
+})
+test('停止长请求后恢复输入；非法生成结果明确报错', async ({ page }) => {
+  await enter(page)
+  await ask(page, '分析 NVIDIA 财务，慢速验收')
+  await page.getByRole('button', { name: '停止研究' }).click()
+  await expect(page.getByPlaceholder('输入公司、对比对象或研究目标…')).toBeEnabled()
+  await expect.poll(async () => (await (await page.request.get('/api/history')).json()).every((run: { running: boolean }) => !run.running)).toBe(true)
+  await ask(page, '分析 NVIDIA 财务，非法输出验收')
+  await expect(page.getByRole('alert')).toContainText(/无法渲染|没有有效|缺少可展示/)
+  await expect(page.getByRole('button', { name: '重试', exact: true })).toBeVisible()
+})

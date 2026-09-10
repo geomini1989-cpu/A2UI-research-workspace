@@ -5,7 +5,7 @@ import { createResearchClient } from '../mcp/client.js'
 import type { CompanyProfile, FinancialSummary } from '../domain/research.js'
 import type { SpecialistActivity, StructuredResearchResult } from '../orchestration/types.js'
 import { assertStructuredResearchResult } from '../orchestration/researchResultSchema.js'
-import { companiesInRequest } from './specialistUtils.js'
+import { resolveCompaniesInRequest } from './specialistUtils.js'
 import {
   compactFinding,
   evidenceFor,
@@ -54,7 +54,7 @@ export async function runFinancialAgent(
   request: string,
   onActivity: (activity: FinancialActivity) => void = () => {},
 ): Promise<StructuredResearchResult> {
-  const companies = companiesInRequest(request)
+  const companies = await resolveCompaniesInRequest(request)
   if (companies.length === 0) throw new Error('No supported company found in the financial research request')
 
   const activities: FinancialActivity[] = []

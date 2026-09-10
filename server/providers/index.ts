@@ -1,3 +1,4 @@
+import { SecResearchProvider } from './secResearchProvider.js'
 import { config } from '../config.js'
 import { demoResearchProvider } from './demoResearchProvider.js'
 import {
@@ -5,18 +6,14 @@ import {
   type ResearchDataProvider,
 } from './researchProvider.js'
 
-export type ResearchProviderId = 'demo'
+export type ResearchProviderId = 'demo' | 'sec'
 
-/**
- * Composition root for research data.
- *
- * Today only the deterministic demo provider is registered. A live provider can
- * be added here later without changing MCP tools or specialist agents.
- */
+/** 按启动配置选择演示数据或 SEC 财报。 / Select demo data or SEC filings at startup. */
 export function createResearchProvider(
   providerId = config.researchProviderId,
 ): ResearchDataProvider {
   if (providerId === 'demo') return demoResearchProvider
+  if (providerId === 'sec') return new SecResearchProvider()
   throw new ResearchProviderError(
     `Unsupported research provider: "${providerId}"`,
     'UNSUPPORTED_PROVIDER',

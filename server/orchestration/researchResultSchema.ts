@@ -6,13 +6,15 @@ const Importance = z.enum(['low', 'medium', 'high'])
 const Sentiment = z.enum(['positive', 'neutral', 'negative', 'mixed'])
 
 const Evidence = z.object({
+  period: z.string().max(80).optional(),
+  retrievedAt: z.string().datetime().optional(),
   id: z.string().min(1).max(160),
   sourceName: z.string().min(1).max(120),
   sourceType: z.enum(['mcp', 'demo']),
   providerId: z.string().min(1).max(120).optional(),
   providerKind: z.enum(['demo', 'live']).optional(),
   tool: z.string().max(80).optional(),
-  ref: z.string().max(200).optional(),
+  ref: z.string().max(500).optional(),
   description: z.string().max(240).optional(),
 })
 
@@ -82,6 +84,7 @@ const NeedUserInput = z.object({
 
 export const StructuredResearchResultSchema = z.object({
   schemaVersion: z.literal('research-result/v2'),
+  usage: z.object({ calls: z.number(), promptTokens: z.number(), completionTokens: z.number() }).optional(),
   agentId: z.string().min(1).max(80),
   dimension: z.enum(['financial', 'market', 'technology']),
   subject: z.string().min(1).max(160),

@@ -50,11 +50,11 @@ describe('InteractionPolicy: autonomy first', () => {
 })
 
 describe('Pending task and A2UI interaction surfaces', () => {
-  it('pauses a task with correlated identifiers and an in-memory waiting record', () => {
+  it('pauses a task with correlated identifiers and a persisted waiting record', () => {
     const interaction = createPendingInteraction('missing_information', { originalRequest: '帮我比较两家公司', decision: decideInteraction('帮我比较两家公司') })
     expect(interaction).toMatchObject({ status: 'waiting', taskStatus: 'WAITING_FOR_USER' })
     expect(interaction.interactionId).toBeTruthy(); expect(interaction.taskId).toBeTruthy(); expect(interaction.surfaceId).toBeTruthy()
-    expect(getPendingInteraction(interaction.interactionId)).toBe(interaction)
+    expect(getPendingInteraction(interaction.interactionId)).toEqual(interaction)
   })
 
   it('generates the missing-information form entirely as allow-listed A2UI', () => {
@@ -81,7 +81,7 @@ describe('Pending task and A2UI interaction surfaces', () => {
     const outcome = handleRegisteredAction(action('submit_missing_information', interaction, { companyA: 'NVIDIA', companyB: 'AMD' }))
     expect(outcome.kind).toBe('resume')
     if (outcome.kind === 'resume') expect(outcome.interaction?.taskId).toBe(interaction.taskId)
-    expect(interaction).toMatchObject({ status: 'completed', taskStatus: 'RUNNING' })
+    expect(getPendingInteraction(interaction.interactionId)).toMatchObject({ status: 'completed', taskStatus: 'RUNNING' })
   })
 
   it('renders explicit choice and routes only selected dimensions', () => {
@@ -117,7 +117,7 @@ describe('Pending task and A2UI interaction surfaces', () => {
   it('Cancel transitions to CANCELLED and prevents any later resume', () => {
     const interaction = createPendingInteraction('explicit_user_choice', { originalRequest: '分析 NVIDIA', decision: decideInteraction('让我选择') })
     expect(handleRegisteredAction(action('cancel_task', interaction))).toMatchObject({ kind: 'cancel' })
-    expect(interaction).toMatchObject({ status: 'cancelled', taskStatus: 'CANCELLED' })
+    expect(getPendingInteraction(interaction.interactionId)).toMatchObject({ status: 'cancelled', taskStatus: 'CANCELLED' })
     expect(() => handleRegisteredAction(action('submit_research_scope', interaction, { dimensions: ['financial'] }))).toThrow()
   })
 })

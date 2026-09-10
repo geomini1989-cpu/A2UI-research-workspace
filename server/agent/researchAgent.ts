@@ -1,6 +1,6 @@
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { chatText, chatTextStream, chatWithTools, chatWithToolsStream, LlmError, type LlmMessage, type LlmToolCall } from '../llm/deepseek.js'
-import { buildA2uiMessages, attachRoot, JsonObjectStreamParser } from '../a2ui/a2uiGenerator.js'
+import { buildA2uiMessages, JsonObjectStreamParser } from '../a2ui/a2uiGenerator.js'
 import { RESEARCH_CATALOG_ID, sanitizeAgentMessage, sanitizeMessage } from '../a2ui/a2uiSchema.js'
 import { StreamingA2uiState } from '../a2ui/streamingA2ui.js'
 import { createProgressiveResearchSurface, progressiveAgentActivity, progressiveAgentSettled, progressivePhase, progressiveRenderSteps } from '../a2ui/progressiveA2ui.js'
@@ -19,10 +19,16 @@ import { createPendingInteraction } from '../interaction/interactionStore.js'
 import { approvalSurface, cancelledSurface, missingInformationSurface, planReviewSurface, researchScopeSurface } from '../interaction/interactionUi.js'
 import { handleRegisteredAction } from '../interaction/actionRegistry.js'
 import { registerResearchSurface } from '../interaction/researchSession.js'
+import { evidenceFor, toolProvenance } from './structuredResultUtils.js'
+import { resolveCompaniesInRequest } from './specialistUtils.js'
 import { semanticActionRequest } from '../interaction/semanticActions.js'
+import { runContext } from '../runtime/context.js'
+import type { ResearchEvidence } from '../orchestration/types.js'
 
 /** Events emitted to the NDJSON client stream. */
 export type AgentEvent =
+  | { type: 'telemetry'; runId: string; durationMs: number; calls: number; promptTokens: number; completionTokens: number }
+  | { type: 'evidence'; unavailable?: { agentName: string; reason: string }[]; evidence: ResearchEvidence[] }
   | { type: 'status'; status: string }
   | { type: 'activity'; actor: string; activity: string; detail?: string }
   | { type: 'task_state'; state: 'RUNNING' | 'WAITING_FOR_USER' | 'COMPLETED' | 'FAILED' | 'CANCELLED'; taskId: string; interactionId?: string }
@@ -137,7 +143,7 @@ async function callToolSafe(
  * a `role:'tool'` message. When the model stops requesting tools it returns the
  * final A2UI text, which we hand back to the caller.
  *
- * Never throws — callers expect a string or a settled stream.
+ * 调用失败由上层转为错误事件。 / Call failures propagate to the caller for error events.
  */
 async function resolveResearchContent(
   messages: LlmMessage[],
@@ -171,6 +177,10 @@ async function resolveResearchContent(
           onToolProgress({ stage: 'started', toolName: tc.name })
           try {
             const outcome = await callToolSafe(client, tc)
+            if (tc.name !== 'search_company') {
+              const data = outcome.data as { company?: string; profile?: { name: string } }
+              emit({ type: 'evidence', evidence: [evidenceFor('coordinator', data.company ?? data.profile?.name ?? 'company', tc.name, 'MCP 原始研究数据', toolProvenance(outcome.data))] })
+            }
             outcomeText = outcome.text || `(no text result for ${tc.name})`
             onToolProgress({ stage: 'completed', toolName: tc.name })
           } catch (err) {
@@ -219,17 +229,20 @@ function surfaceIdFrom(messages: A2uiMessage[]) {
   return undefined
 }
 
-/** Validate + stream a raw LLM payload, attaching it to an in-memory research session. */
+/** 校验并流式发布结果，关联持久化研究会话。 / Validate and stream results into the persisted research session. */
 async function streamGeneratedMessages(rawText: string, emit: Emit, options: { taskId?: string; originalRequest?: string; surfaceId?: string; drill?: import('../interaction/researchSession.js').DrillDownContext; existingSurface?: boolean } = {}) {
   const { messages: built, droppedComponents, errors } = buildA2uiMessages(rawText, { surfaceId: options.surfaceId })
+  const contentTypes = ['MetricCard', 'StockOverviewCard', 'ComparisonCard', 'ResearchSummaryCard', 'Chart', 'RiskBadge', 'InsightList']
+  if (!built.some(message => 'updateComponents' in message && message.updateComponents.components.some(component => contentTypes.includes(component.component)))) {
+    throw new LlmError('生成的界面没有有效研究内容', 'INCOMPLETE_A2UI')
+  }
   const contextual = options.taskId ? actionContextForTask(built, options.taskId) : built
   if (droppedComponents.length > 0 || errors.length > 0) {
     console.warn('[a2ui] dropped messages/components:', { droppedComponents, errors })
   }
   const steps = progressiveRenderSteps(contextual, { existingSurface: options.existingSurface })
   if (steps.length === 0) {
-    emit({ type: 'error', error: '无法渲染生成的视图（非法 A2UI 输出）' })
-    return
+    throw new LlmError('无法渲染生成的视图（非法 A2UI 输出）', 'INCOMPLETE_A2UI')
   }
   const surfaceId = options.surfaceId ?? surfaceIdFrom(contextual)
   if (options.taskId && options.originalRequest && surfaceId) registerResearchSurface(options.taskId, surfaceId, options.originalRequest, options.drill)
@@ -237,7 +250,7 @@ async function streamGeneratedMessages(rawText: string, emit: Emit, options: { t
     for (const message of steps[index]) emit({ type: 'message', message })
     if (index < steps.length - 1) await new Promise<void>((resolve) => setTimeout(resolve, RENDER_STEP_DELAY_MS))
   }
-  emit({ type: 'agent_text', text: '已生成研究视图（Demo 数据）' })
+  emit({ type: 'agent_text', text: '研究结果已整理如下。' })
 }
 
 
@@ -339,7 +352,7 @@ function createGeneratedMessageStream(
     if (options.taskId && options.originalRequest) {
       registerResearchSurface(options.taskId, options.surfaceId, options.originalRequest, options.drill)
     }
-    emit({ type: 'agent_text', text: '已生成研究视图（Demo 数据）' })
+    emit({ type: 'agent_text', text: '研究结果已整理如下。' })
   }
 
   return { push, finish }
@@ -393,6 +406,7 @@ async function runCoordinatorResearch(
       },
     )
     const aggregation = aggregateSpecialistResults(results, plan, userMessage)
+    emit({ type: 'evidence', evidence: aggregation.evidence, unavailable: aggregation.unavailable })
     if (aggregation.completedAgents.length > 0) {
       emitOrchestrationActivity(emit, { stage: 'aggregation_started', actor: 'Research Coordinator', detail: `${aggregation.completedAgents.length}/${plan.delegations.length} specialists completed` })
       emitOrchestrationActivity(emit, { stage: 'a2ui_generation', actor: 'Research Coordinator' })
@@ -439,6 +453,7 @@ async function runCoordinatorAnswer(userMessage: string, emit: Emit): Promise<st
   if (plan.delegations.length > 0) {
     const results = await executeDelegationPlan(plan, userMessage, (event) => emitOrchestrationActivity(emit, event))
     const aggregation = aggregateSpecialistResults(results, plan, userMessage)
+    emit({ type: 'evidence', evidence: aggregation.evidence, unavailable: aggregation.unavailable })
     if (aggregation.completedAgents.length > 0) {
       emitOrchestrationActivity(emit, {
         stage: 'aggregation_started',
@@ -467,7 +482,9 @@ async function runCoordinatorAnswer(userMessage: string, emit: Emit): Promise<st
 
 export async function runAutonomousResearch(userMessage: string, emit: Emit, dimensions?: ResearchDimension[], taskId: string = crypto.randomUUID(), surfaceIdOverride?: string): Promise<void> {
   emit({ type: 'task_state', state: 'RUNNING', taskId })
-  const requirement = dimensions ? requirementForDimensions(dimensions) : analyzeTaskRequirements(userMessage)
+  const requirement = runContext.getStore()?.mode === 'single'
+    ? { requiredSkills: [], canRunInParallel: false, useCoordinatorMcp: true }
+    : dimensions ? requirementForDimensions(dimensions) : analyzeTaskRequirements(userMessage)
   emitOrchestrationActivity(emit, { stage: 'planning', actor: 'Research Coordinator', detail: requirement.requiredSkills.length ? `Required skills: ${requirement.requiredSkills.join(', ')}` : 'No specialist skills required' })
   const plan = createDelegationPlan(requirement)
   const surfaceId = surfaceIdOverride ?? `research-${taskId}`
@@ -516,13 +533,14 @@ export async function runAutonomousResearch(userMessage: string, emit: Emit, dim
       return
     }
     const aggregation = aggregateSpecialistResults(results, plan, userMessage)
+    emit({ type: 'evidence', evidence: aggregation.evidence, unavailable: aggregation.unavailable })
     if (aggregation.completedAgents.length > 0) {
       emitOrchestrationActivity(emit, { stage: 'aggregation_started', actor: 'Research Coordinator', detail: `${aggregation.completedAgents.length}/${plan.delegations.length} specialists completed` })
       emit({ type: 'status', status: '正在综合多个专业研究结果…' })
       for (const message of progressivePhase(surfaceId, 'synthesizing')) emit({ type: 'message', message })
       const uiMessages: LlmMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Original request: ${userMessage}\nThe Coordinator dynamically discovered specialists by Agent Card skills and received this unified aggregation context over parallel A2A calls. Synthesize every available dimension, visibly note unavailable dimensions, and generate one final A2UI surface:\n${JSON.stringify(aggregation)}` },
+        { role: 'user', content: `研究请求：${userMessage}\n以下是经过投影的研究事实、判断和证据；明确说明缺失维度，不得补造数据：\n${JSON.stringify(buildCoordinatorResearchContext(aggregation))}` },
       ]
       try {
         emitOrchestrationActivity(emit, { stage: 'a2ui_generation', actor: 'Research Coordinator' })
@@ -577,7 +595,10 @@ export async function runAutonomousResearch(userMessage: string, emit: Emit, dim
 export async function runResearchAgent(userMessage: string, emit: Emit): Promise<void> {
   emit({ type: 'status', status: '正在分析请求…' })
   emit({ type: 'activity', actor: 'Research Coordinator', activity: 'Analyzing request' })
-  const decision = decideInteraction(userMessage)
+  let decision = decideInteraction(userMessage)
+  if (decision.reason === 'missing_information' && (await resolveCompaniesInRequest(userMessage)).length >= 2) {
+    decision = { required: false, reason: 'none', confidence: 1, explanation: 'Comparison targets resolved by the configured provider.' }
+  }
   if (!decision.required) {
     emit({ type: 'activity', actor: 'Research Coordinator', activity: 'No user input required', detail: decision.explanation })
     await runAutonomousResearch(userMessage, emit)
@@ -682,7 +703,7 @@ export async function runResearchAgentAction(
     action.context && Object.keys(action.context).length
       ? `操作上下文: ${JSON.stringify(action.context)}`
       : '',
-    '依然只输出 A2UI v0.9 消息数组，包含 createSurface、root 容器和多个 updateComponents，并明确标记为 Demo 数据。',
+    '依然只输出 A2UI v0.9 消息数组，包含 createSurface、root 容器和多个 updateComponents，保留工具返回的数据来源。',
     '如果操作是生成报告，输出「Research Report」结构（Executive Summary / Key Metrics / Risks / Conclusion）。',
   ]
     .filter(Boolean)
@@ -697,82 +718,11 @@ export async function runResearchAgentAction(
   try {
     finalContent = await resolveResearchContent(messages, emit)
   } catch (err) {
-    console.warn('[action] DeepSeek tool loop failed, using canned fallback:', describeError(err))
-    const fallback = cannedActionMessages(action.name, action.context ?? {})
-    for (const m of fallback) emit({ type: 'message', message: m })
-    emit({ type: 'agent_text', text: '已执行操作（Demo 数据）' })
-    emit({ type: 'done' })
+    emit({ type: 'error', error: describeError(err) })
     return
   }
 
   emit({ type: 'status', status: '正在生成研究视图…' })
   await streamGeneratedMessages(finalContent, emit)
   emit({ type: 'done' })
-}
-
-/** Deterministic fallback so buttons always produce a visible result (offline-safe). */
-export function cannedActionMessages(
-  name: string,
-  _context: Record<string, unknown>,
-): A2uiMessage[] {
-  const sid = 'research'
-  const create = { version: 'v0.9' as const, createSurface: { surfaceId: sid, catalogId: RESEARCH_CATALOG_ID, theme: {} } }
-
-  if (name === 'generate_report') {
-    return attachRoot([
-      create,
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: sid,
-          components: [
-            { component: 'Text', id: 'r-title', variant: 'h2', text: '研究简报' },
-            { component: 'Badge', id: 'r-tag', label: 'Demo Data', variant: 'secondary' },
-            { component: 'Divider', id: 'r-div' },
-            { component: 'Text', id: 'r-sum', variant: 'h3', text: '核心摘要' },
-            { component: 'Text', id: 'r-sum-t', variant: 'body', text: '演示公司基本面稳健、增长动能明确。' },
-            { component: 'Text', id: 'r-mk', variant: 'h3', text: '关键指标' },
-            { component: 'Table', id: 'r-tbl', columns: [{ key: 'm', label: '指标' }, { key: 'v', label: '数值' }], rows: [{ m: '营收', v: '$XXX B' }, { m: '增速', v: 'XX%' }] },
-            { component: 'Text', id: 'r-ri', variant: 'h3', text: '风险提示' },
-            { component: 'Text', id: 'r-ri-t', variant: 'body', text: '行业竞争加剧、估值波动。' },
-            { component: 'Divider', id: 'r-div2' },
-            { component: 'Text', id: 'r-con', variant: 'h3', text: '结论' },
-            { component: 'Text', id: 'r-con-t', variant: 'body', text: '长期看好，审慎关注宏观风险。' },
-          ],
-        },
-      },
-    ])
-  }
-
-  if (name === 'compare_company') {
-    return attachRoot([
-      create,
-      {
-        version: 'v0.9',
-        updateComponents: {
-          surfaceId: sid,
-          components: [
-            { component: 'Text', id: 'c-title', variant: 'h2', text: '公司对比' },
-            { component: 'Badge', id: 'c-tag', label: 'Demo Data', variant: 'secondary' },
-            { component: 'Table', id: 'c-tbl', columns: [{ key: 'm', label: '指标' }, { key: 'a', label: 'NVIDIA' }, { key: 'b', label: 'AMD' }], rows: [{ m: '营收', a: '$XXX B', b: '$XX B' }, { m: '增速', a: 'XX%', b: 'XX%' }, { m: 'P/E', a: 'XX', b: 'XX' }] },
-          ],
-        },
-      },
-    ])
-  }
-
-  return attachRoot([
-    create,
-    {
-      version: 'v0.9',
-      updateComponents: {
-        surfaceId: sid,
-        components: [
-          { component: 'Text', id: 'a-title', variant: 'h2', text: `已收到操作：${name}` },
-          { component: 'Badge', id: 'a-tag', label: 'Demo Data', variant: 'secondary' },
-          { component: 'Text', id: 'a-body', variant: 'body', text: '操作已模拟处理（当前 Demo 未接入真实后端）。' },
-        ],
-      },
-    },
-  ])
 }

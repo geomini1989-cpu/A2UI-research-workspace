@@ -1,3 +1,4 @@
+import { getResearchProvider } from '../providers/index.js'
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import { buildStableLayoutPlan, stableTopLevelOrder } from './layoutPolicy.js'
 import { normalizeMetricInteractionGroups } from './interactionConsistency.js'
@@ -209,7 +210,7 @@ export class StreamingA2uiState {
     const sourceComponents: Component[] = [
       { component: 'Divider', id: dividerId },
       { component: 'Text', id: labelId, variant: 'caption', text: '数据来源' },
-      { component: 'Badge', id: badgeId, label: 'Demo / MCP Research Tool', variant: 'secondary' },
+      { component: 'Badge', id: badgeId, label: getResearchProvider().metadata.kind === 'demo' ? 'Demo / MCP Research Tool' : getResearchProvider().metadata.sourceLabel, variant: 'secondary' },
     ]
     for (const component of sourceComponents) {
       if (typeof component.id === 'string') this.componentsById.set(component.id, component)

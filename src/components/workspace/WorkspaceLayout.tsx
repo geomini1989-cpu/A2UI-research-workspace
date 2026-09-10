@@ -11,7 +11,6 @@ export function WorkspaceLayout() {
   const isGenerating = useWorkspaceStore((s) => s.isGenerating)
 
   const openCustomResearch = () => {
-    clear()
     void sendMessage('打开 NVIDIA 研究方案，我想自己选择研究方向')
   }
 
@@ -35,7 +34,7 @@ export function WorkspaceLayout() {
               <span>自定义研究</span>
             </Button>
             <ThemeToggle />
-            <Button variant="ghost" size="icon" onClick={clear} disabled={isGenerating} aria-label="新建研究" title="新建研究">
+            <Button variant="ghost" size="icon" onClick={clear} disabled={isGenerating} aria-label="清空会话（保留研究任务）" title="清空会话（保留研究任务）">
               <RotateCcw aria-hidden="true" />
             </Button>
           </div>

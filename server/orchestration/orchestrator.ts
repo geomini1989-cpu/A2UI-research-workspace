@@ -64,7 +64,7 @@ export async function executeDelegationPlan(
   request: string,
   onActivity: (event: AgentActivityEvent) => void = () => {},
   dispatch: SpecialistDispatch = defaultSpecialistDispatch,
-  timeoutMs = 30_000,
+  timeoutMs = 75_000,
   onSettled: (result: DelegationResult) => void = () => {},
 ): Promise<DelegationResult[]> {
   const calls = plan.delegations.map(async (match): Promise<DelegationResult> => {

@@ -1,3 +1,5 @@
+import { config } from '../config.js'
+import { requestSignal, recordUsage, runContext } from '../runtime/context.js'
 import { Role, TaskState, type AgentCard, type Part, type Task } from '@a2a-js/sdk'
 import { ClientFactory, ClientFactoryOptions, DefaultAgentCardResolver, JsonRpcTransportFactory } from '@a2a-js/sdk/client'
 import type { SpecialistActivity, SpecialistResult } from '../orchestration/types.js'
@@ -24,14 +26,18 @@ export async function dispatchSpecialistTask(
   onActivity: (activity: SpecialistActivity) => void = () => {},
 ): Promise<A2aDispatchOutcome> {
   try {
-    const options = ClientFactoryOptions.createFrom(ClientFactoryOptions.default, { transports: [new JsonRpcTransportFactory({ fetchImpl })] })
+    const options = ClientFactoryOptions.createFrom(ClientFactoryOptions.default, { transports: [new JsonRpcTransportFactory({ fetchImpl: (input, init) => {
+      const headers = new Headers(init?.headers)
+      headers.set('x-agent-token', config.agentToken)
+      return fetchImpl(input, { ...init, headers })
+    } })] })
     const client = await new ClientFactory(options).createFromAgentCard(card)
     const request = { tenant: '', message: { messageId: crypto.randomUUID(), contextId: '', taskId: '', role: Role.ROLE_USER, parts: [{ content: { $case: 'text' as const, value: prompt }, metadata: undefined, filename: '', mediaType: 'text/plain' }], metadata: undefined, extensions: [], referenceTaskIds: [] }, configuration: { acceptedOutputModes: ['application/json'], taskPushNotificationConfig: undefined, returnImmediately: false }, metadata: undefined }
     let taskId = ''
     let finalState: TaskState | undefined
     let result: unknown
 
-    for await (const response of client.sendMessageStream(request, { signal: AbortSignal.timeout(timeoutMs) })) {
+    for await (const response of client.sendMessageStream(request, { signal: requestSignal(timeoutMs) })) {
       const payload = response.payload
       if (!payload) continue
       if (payload.$case === 'task') {
@@ -56,8 +62,10 @@ export async function dispatchSpecialistTask(
     if (finalState !== TaskState.TASK_STATE_COMPLETED) throw new A2aClientError(`Specialist task ended in state ${finalState ?? 'unknown'}`, 'REMOTE_FAILED')
     const validated = parseStructuredResearchResult(result)
     if (!validated) throw new A2aClientError('Specialist task returned an invalid research-result/v2 artifact', 'BAD_RESULT')
+    if (validated.usage) recordUsage(validated.usage)
     return { taskId, result: validated }
   } catch (err) {
+    if (runContext.getStore()?.signal.aborted) throw err
     if (err instanceof A2aClientError) throw err
     if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) throw new A2aClientError('A2A request timed out', 'TIMEOUT')
     throw new A2aClientError(`A2A request failed: ${err instanceof Error ? err.message : 'unknown error'}`, 'REMOTE_FAILED')

@@ -1,61 +1,61 @@
-/**
- * HTTP client for the Research Agent backend.
- *
- * Both /api/chat and /api/action respond with `application/x-ndjson` — one JSON
- * object per line. Each line is an AgentStreamEvent. We parse them and hand each
- * to `onEvent` so the store can progressively update the Chat + A2UI surface.
- */
 import type { AgentStreamEvent } from '@/types/agent'
 
 type EventHandler = (event: AgentStreamEvent) => void
-
-async function consumeNdjson(res: Response, onEvent: EventHandler) {
+export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, init)
+  const body = await response.json()
+  if (!response.ok) throw new Error(body.error ?? '请求失败')
+  return body as T
+}
+export async function consumeNdjson(res: Response, onEvent: EventHandler) {
   if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`API request failed (${res.status}): ${text}`)
+    const body = await res.json()
+    throw new Error(body.error ?? '研究请求失败')
   }
-  if (!res.body) throw new Error('No response body')
-
+  if (!res.body) throw new Error('研究响应为空')
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    let idx: number
-    while ((idx = buffer.indexOf('\n')) !== -1) {
-      const line = buffer.slice(0, idx).trim()
-      buffer = buffer.slice(idx + 1)
-      if (!line) continue
-      try {
-        onEvent(JSON.parse(line) as AgentStreamEvent)
-      } catch {
-        // ignore malformed control lines; never crash the stream
+  let terminal = false
+  const consume = (line: string) => {
+    if (!line.trim()) return
+    const event = JSON.parse(line) as AgentStreamEvent
+    if (event.type === 'task_state') terminal = event.state !== 'RUNNING'
+    if (event.type === 'done' || event.type === 'error') terminal = true
+    onEvent(event)
+  }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let idx: number
+      while ((idx = buffer.indexOf('\n')) !== -1) {
+        consume(buffer.slice(0, idx))
+        buffer = buffer.slice(idx + 1)
       }
     }
+    consume(buffer + decoder.decode())
+    if (!terminal) throw new Error('研究连接提前结束，请重试。')
+  } finally {
+    reader.releaseLock()
   }
 }
-
-/** Send a natural-language research request and stream back A2UI events. */
-export async function streamChat(message: string, onEvent: EventHandler) {
-  const res = await fetch('/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+async function stream(path: string, payload: unknown, onEvent: EventHandler, signal?: AbortSignal) {
+  const timeout = AbortSignal.timeout(300_000)
+  const res = await fetch(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   })
   await consumeNdjson(res, onEvent)
 }
-
-/** Post an A2UI component action (e.g. a button click) and stream back events. */
-export async function streamAction(
+export function streamChat(message: string, onEvent: EventHandler, signal?: AbortSignal) {
+  return stream('/api/chat', { message }, onEvent, signal)
+}
+export function streamAction(
   payload: { name: string; surfaceId: string; sourceComponentId: string; context: Record<string, unknown> },
   onEvent: EventHandler,
+  signal?: AbortSignal,
 ) {
-  const res = await fetch('/api/action', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  await consumeNdjson(res, onEvent)
+  return stream('/api/action', payload, onEvent, signal)
 }

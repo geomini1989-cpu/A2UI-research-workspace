@@ -7,13 +7,17 @@ import {
   createResearchJobId,
   getResearchJob,
   saveResearchJobDraft,
-  setResearchJobStatus,
+  claimResearchJob,
+  finishResearchJob,
+  getResearchJobResult,
   submitResearchJob,
   type ResearchDepth,
   type ResearchJob,
   type ResearchJobInput,
 } from './researchJobService.js'
 import { researchJobFormSurface, researchJobStatusSurface, researchJobSubmittedSurface } from './researchJobUi.js'
+import { runContext } from '../runtime/context.js'
+import type { AgentEvent } from '../agent/researchAgent.js'
 
 const RESEARCH_JOB_ACTIONS = new Set([
   'save_research_job_draft',
@@ -108,6 +112,10 @@ export async function runResearchJobRequest(message: string, emit: Emit): Promis
       emit({ type: 'done' })
       return
     }
+    if (job.status === 'COMPLETED') {
+      for (const event of getResearchJobResult(job.id)) emit(event)
+      return
+    }
     emitMessages(emit, researchJobStatusSurface(job, surfaceId))
     emit({ type: 'agent_text', text: '已读取研究任务状态。' })
     emit({ type: 'task_state', state: job.status === 'FAILED' ? 'FAILED' : 'COMPLETED', taskId: job.id })
@@ -145,22 +153,31 @@ export async function runResearchJobAction(action: AgentActionPayload, emit: Emi
       if (typeof jobId !== 'string') throw new InteractionValidationError('Research job id is required')
       const job = await getResearchJob(jobId)
       if (!job) throw new InteractionValidationError('Research job not found')
-      if (job.status !== 'SUBMITTED' && job.status !== 'RUNNING') {
-        throw new InteractionValidationError('Submit the research job before starting it')
+      const claimed = claimResearchJob(job.id)
+      if (!claimed) {
+        if (job.status === 'DRAFT') throw new InteractionValidationError('请先提交研究任务')
+        emitMessages(emit, researchJobStatusSurface(job, 'research-job-' + job.id))
+        emit({ type: 'agent_text', text: job.status === 'RUNNING' ? '任务正在运行，本次操作未重复执行。' : '任务已完成，可以按编号打开已有结果。' })
+        emit({ type: 'done' })
+        return
       }
-
-      await setResearchJobStatus(job.id, 'RUNNING')
-      let finalStatus: 'COMPLETED' | 'FAILED' = 'COMPLETED'
-      await runAutonomousResearch(
-        buildResearchRequest(job),
-        (event) => {
-          if (event.type === 'task_state' && event.taskId === job.id && event.state === 'FAILED') finalStatus = 'FAILED'
+      const events: AgentEvent[] = []
+      let finalStatus: 'COMPLETED' | 'FAILED' | 'CANCELLED' = 'FAILED'
+      let failure: string | undefined
+      try {
+        await runAutonomousResearch(buildResearchRequest(claimed), event => {
+          events.push(event)
+          if (event.type === 'error') failure = event.error
+          if (event.type === 'task_state' && event.state === 'COMPLETED') finalStatus = 'COMPLETED'
           emit(event)
-        },
-        job.dimensions,
-        job.id,
-      )
-      await setResearchJobStatus(job.id, finalStatus)
+        }, claimed.dimensions, claimed.id, action.surfaceId)
+      } catch (error) {
+        failure = (error as Error).message
+        throw error
+      } finally {
+        if (runContext.getStore()?.signal.aborted) finalStatus = 'CANCELLED'
+        finishResearchJob(job.id, finalStatus, events, failure)
+      }
       return
     }
 

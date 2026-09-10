@@ -4,14 +4,18 @@
  * No MCP, A2A, LLM or UI concepts belong in this layer. External/demo providers
  * normalize their data into these types before the rest of the system consumes it.
  */
+export interface DataSource { url: string; retrievedAt: string; period?: string }
+
 export interface CompanyProfile {
+  source?: DataSource
+  availableDimensions?: string[]
   id: string
   name: string
   ticker: string
   sector: string
   industry: string
   headquarters: string
-  founded: number
+  founded: number | null
   employees: string
   description: string
   highlights: string[]
@@ -47,9 +51,9 @@ export interface CompanyRisk {
 export interface FinancialHistoryPoint {
   period: string
   revenueB: number
-  grossMarginPct: number
-  operatingMarginPct: number
-  eps: number
+  grossMarginPct?: number
+  operatingMarginPct?: number
+  eps?: number
 }
 
 export interface FinancialSummary {
@@ -74,6 +78,7 @@ export interface CompanySearchResult {
 }
 
 export interface CompanyFinancialData {
+  source?: DataSource
   company: string
   ticker?: string
   financial: FinancialSummary

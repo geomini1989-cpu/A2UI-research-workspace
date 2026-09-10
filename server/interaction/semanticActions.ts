@@ -46,6 +46,7 @@ export function isSemanticActionName(value: string): value is SemanticActionName
 function cleanString(value: unknown, key: string): string | undefined {
   if (value === undefined) return undefined
   if (typeof value !== 'string') throw new SemanticActionValidationError(`${key} must be a string`)
+  // oxlint-disable-next-line no-control-regex -- 去除传入文本的控制字符。 / Strip control characters from input text.
   const normalized = value.replace(/[\u0000-\u001f]/g, ' ').trim().replace(/\s+/g, ' ')
   if (!normalized || normalized.length > 120) throw new SemanticActionValidationError(`${key} is invalid`)
   return normalized

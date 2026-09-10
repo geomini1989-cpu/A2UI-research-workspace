@@ -1,0 +1,98 @@
+[
+  {
+    "id": "01",
+    "prompt": "分析 NVIDIA 的财务"
+  },
+  {
+    "id": "02",
+    "prompt": "分析 AMD 的财务"
+  },
+  {
+    "id": "03",
+    "prompt": "分析 Apple 的财务"
+  },
+  {
+    "id": "04",
+    "prompt": "分析 Microsoft 的财务"
+  },
+  {
+    "id": "05",
+    "prompt": "分析 Tesla 的财务"
+  },
+  {
+    "id": "06",
+    "prompt": "分析 Intel 的财务"
+  },
+  {
+    "id": "07",
+    "prompt": "对比 NVIDIA 和 AMD 的财务"
+  },
+  {
+    "id": "08",
+    "prompt": "对比 Apple 和 Microsoft 的财务"
+  },
+  {
+    "id": "09",
+    "prompt": "分析 NVIDIA 的营收与利润率趋势"
+  },
+  {
+    "id": "10",
+    "prompt": "分析 AMD 的现金流和资本投入"
+  },
+  {
+    "id": "11",
+    "prompt": "分析 Apple 的毛利率和每股收益"
+  },
+  {
+    "id": "12",
+    "prompt": "分析 Microsoft 的营收增速"
+  },
+  {
+    "id": "13",
+    "prompt": "分析 NVIDIA 的市场和新闻"
+  },
+  {
+    "id": "14",
+    "prompt": "分析 AMD 的技术与产品"
+  },
+  {
+    "id": "15",
+    "prompt": "全面分析 NVIDIA，包含财务、市场与技术"
+  },
+  {
+    "id": "16",
+    "prompt": "全面分析 Apple，包含财务、市场与技术"
+  },
+  {
+    "id": "17",
+    "prompt": "对比 NVIDIA 和 AMD 的技术"
+  },
+  {
+    "id": "18",
+    "prompt": "分析 Tesla 的主要风险"
+  },
+  {
+    "id": "19",
+    "prompt": "分析一家不存在的公司 ZXNONEXISTENT"
+  },
+  {
+    "id": "20",
+    "prompt": "帮我对比一下"
+  },
+  {
+    "id": "21",
+    "prompt": "分析 AMZN 的年度营收"
+  },
+  {
+    "id": "22",
+    "prompt": "分析 GOOGL 的现金流"
+  },
+  {
+    "id": "23",
+    "prompt": "给出 NVIDIA 的实时股价，缺少数据就说明无法提供"
+  },
+  {
+    "id": "24",
+    "prompt": "分析 NVIDIA 财务，每个数字说明来源与报告期，缺失项不要推测"
+  }
+]

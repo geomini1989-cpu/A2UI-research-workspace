@@ -1,3 +1,4 @@
+import { getResearchProvider } from '../providers/index.js'
 import type { A2uiMessage } from '@a2ui/web_core/v0_9'
 import type { AgentMatch, DelegationResult } from '../orchestration/types.js'
 import { RESEARCH_CATALOG_ID, sanitizeMessage } from './a2uiSchema.js'
@@ -178,7 +179,7 @@ export function createProgressiveResearchSurface(
       children: actorKeys.map((key) => ref(`progress-card-${key}`)),
     },
     ...actors.flatMap(actorComponents),
-    { component: 'Badge', id: 'progress-source', label: 'Demo / MCP Research Tool', variant: 'outline' },
+    { component: 'Badge', id: 'progress-source', label: getResearchProvider().metadata.kind === 'demo' ? 'Demo / MCP Research Tool' : getResearchProvider().metadata.sourceLabel, variant: 'outline' },
   ]
 
   return validated([
